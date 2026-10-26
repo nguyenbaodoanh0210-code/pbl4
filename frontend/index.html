@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f7ef" />
+    <meta name="description" content="Theo dõi nhà kính và dữ liệu cảm biến La Nhà." />
+    <title>La Nhà · Vườn nhà bạn</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-mark" aria-hidden="true">♧</div>
+        <div class="brand-copy"><strong>LA NHÀ</strong><span id="crumb">Tổng quan / Vườn hôm nay</span></div>
+        <button class="avatar" type="button" aria-label="Tài khoản">AP</button>
+      </header>
+      <main id="app" aria-live="polite">
+        <div class="loading-page"><span class="spinner"></span><p>Đang tải dữ liệu từ API…</p></div>
+      </main>
+      <nav class="bottom-nav" aria-label="Điều hướng chính">
+        <button data-page="home" class="nav-item active"><span>▦</span><small>Tổng quan</small></button>
+        <button data-page="history" class="nav-item"><span>⌁</span><small>Lịch sử</small></button>
+        <button data-page="greenhouses" class="nav-item"><span>⌂</span><small>Nhà kính</small></button>
+        <button data-page="advice" class="nav-item"><span>♧</span><small>Khuyến nghị</small></button>
+        <button data-page="alerts" class="nav-item"><span>♧</span><small>Thông báo</small></button>
+      </nav>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

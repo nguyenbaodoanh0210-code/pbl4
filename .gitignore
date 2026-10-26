@@ -1,0 +1,16 @@
+# Local secrets and editor-generated query sessions
+api/.env
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+*.session.sql
+.vscode/
+
+# Python environments and caches
+**/venv/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+
+# Frontend dependencies
+frontend/node_modules/
