@@ -1,0 +1,134 @@
+{
+  "dataset": "Chili Plant Disease",
+  "class_names": [
+    "healthy",
+    "leaf curl",
+    "leaf spot",
+    "whitefly",
+    "yellowish"
+  ],
+  "image_size": 160,
+  "split_counts": {
+    "train": {
+      "healthy": 80,
+      "leaf curl": 80,
+      "leaf spot": 80,
+      "whitefly": 80,
+      "yellowish": 80
+    },
+    "val": {
+      "healthy": 10,
+      "leaf curl": 10,
+      "leaf spot": 10,
+      "whitefly": 10,
+      "yellowish": 10
+    },
+    "test": {
+      "healthy": 10,
+      "leaf curl": 10,
+      "leaf spot": 10,
+      "whitefly": 10,
+      "yellowish": 10
+    }
+  },
+  "test_metrics": {
+    "accuracy": 0.699999988079071,
+    "loss": 0.8902249336242676
+  },
+  "classification_report": {
+    "healthy": {
+      "precision": 0.7,
+      "recall": 0.7,
+      "f1-score": 0.7,
+      "support": 10.0
+    },
+    "leaf curl": {
+      "precision": 0.6666666666666666,
+      "recall": 1.0,
+      "f1-score": 0.8,
+      "support": 10.0
+    },
+    "leaf spot": {
+      "precision": 0.5,
+      "recall": 0.3,
+      "f1-score": 0.375,
+      "support": 10.0
+    },
+    "whitefly": {
+      "precision": 0.625,
+      "recall": 0.5,
+      "f1-score": 0.5555555555555556,
+      "support": 10.0
+    },
+    "yellowish": {
+      "precision": 0.9090909090909091,
+      "recall": 1.0,
+      "f1-score": 0.9523809523809523,
+      "support": 10.0
+    },
+    "accuracy": 0.7,
+    "macro avg": {
+      "precision": 0.6801515151515152,
+      "recall": 0.7,
+      "f1-score": 0.6765873015873016,
+      "support": 50.0
+    },
+    "weighted avg": {
+      "precision": 0.6801515151515151,
+      "recall": 0.7,
+      "f1-score": 0.6765873015873016,
+      "support": 50.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      7,
+      3,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      10,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      2,
+      3,
+      3,
+      1
+    ],
+    [
+      2,
+      0,
+      3,
+      5,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      10
+    ]
+  ],
+  "confusion_matrix_labels": [
+    "healthy",
+    "leaf curl",
+    "leaf spot",
+    "whitefly",
+    "yellowish"
+  ],
+  "model": "chili_disease_model.keras",
+  "trained_at_utc": "2026-11-02T01:10:34.185968+00:00",
+  "limitations": [
+    "This is a small demo dataset with only ten test images per class.",
+    "The model is trained from scratch without pretrained weights.",
+    "Scores are experimental and are not a verified plant-health diagnosis."
+  ]
+}

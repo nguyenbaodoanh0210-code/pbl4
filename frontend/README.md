@@ -15,7 +15,7 @@ $env:DATABASE_URL = "postgresql+psycopg2://USER:PASSWORD@localhost:5432/smart_gr
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Thay `USER`, `PASSWORD` và tên database mẫu bằng thông tin PostgreSQL của bạn. Database/schema phải được tạo trước. `DATABASE_URL` là bắt buộc; backend hiện không tự đọc tệp `.env`. Khi API chạy, có thể mở `http://127.0.0.1:8000/health` để xem trạng thái.
+Thay `USER`, `PASSWORD` và tên database mẫu bằng thông tin PostgreSQL của bạn. Database/schema phải được tạo trước. `DATABASE_URL` là bắt buộc; backend tự đọc api/.env khi khởi động `.env`. Khi API chạy, có thể mở `http://127.0.0.1:8000/health` để xem trạng thái.
 
 ### Terminal 2 — Frontend
 
