@@ -1,15 +1,16 @@
 # PBL4 Smart Greenhouse
 
-Dự án gồm backend FastAPI, giao diện frontend tối ưu cho thiết bị di động và mã AI/firmware hiện có.
+Dự án nhà kính thông minh gồm backend FastAPI, giao diện web và source ESP32.
 
-## Cấu trúc
+## Cấu trúc repository
 
-- api/: backend FastAPI, kết nối PostgreSQL qua DATABASE_URL trong api/.env.
-- api/pbl4/: mã AI/firmware đã có trong repository trước đây.
-- frontend/: giao diện web, gọi backend qua proxy cục bộ.
+- api/app/: ứng dụng FastAPI, truy cập database và các adapter AI.
+- api/data/: workbook cảm biến và bộ ảnh bệnh cây ớt dùng để train.
+- api/models/: model đang dùng, báo cáo đánh giá và model legacy chưa xác minh.
+- api/scripts/: script train model, giả lập MQTT và nhận dữ liệu Serial.
+- api/firmware/esp32/: source firmware hiện có.
+- frontend/: giao diện web và proxy API.
 
-## Chạy ứng dụng
+Hướng dẫn khởi chạy backend và các model nằm trong api/README.md. Frontend có hướng dẫn riêng trong frontend/README.md.
 
-Cấu hình api/.env từ api/.env.example, cài dependencies và khởi động API theo hướng dẫn trong api/README.md. Khởi động giao diện theo frontend/README.md.
-
-Không commit api/.env hoặc thông tin xác thực database.
+Cấu hình api/.env từ api/.env.example. Không commit api/.env, thông tin đăng nhập database hoặc token.

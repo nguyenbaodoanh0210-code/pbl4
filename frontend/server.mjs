@@ -6,7 +6,7 @@ const root = resolve(process.cwd());
 const host = process.env.FRONTEND_HOST || '127.0.0.1';
 const port = Number(process.env.FRONTEND_PORT || 5173);
 const apiOrigin = (process.env.API_ORIGIN || 'http://127.0.0.1:8000').replace(/\/$/, '');
-const contentTypes = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.ico':'image/x-icon' };
+const contentTypes = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.webp':'image/webp', '.ico':'image/x-icon' };
 
 async function bodyOf(request) {
   const chunks = [];
@@ -20,6 +20,7 @@ const server = createServer(async (req, res) => {
     try {
       const headers = { Accept: req.headers.accept || 'application/json' };
       if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
+      if (req.headers.authorization) headers.Authorization = req.headers.authorization;
       const body = ['GET', 'HEAD'].includes(req.method || 'GET') ? undefined : await bodyOf(req);
       const upstream = await fetch(apiOrigin + url.pathname + url.search, { method: req.method, headers, body });
       res.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json', 'Cache-Control':'no-store' });

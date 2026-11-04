@@ -1,0 +1,254 @@
+{
+  "dataset": "Greenhouse_Demo_Dataset.xlsx",
+  "dataset_sha256": "935b1d456cafb02d09a38e6c96f8cb32ecd8d01e2aed0aa80a7218906ea5a5be",
+  "sheet": "Dataset_Demo_Plants",
+  "row_count": 2500,
+  "feature_columns": [
+    "Crop_Type",
+    "Growth_Stage",
+    "Temperature",
+    "Humidity",
+    "Soil_Moisture",
+    "Soil_pH",
+    "Nitrogen",
+    "Phosphorus",
+    "Potassium"
+  ],
+  "target": "Fertilizer_Action",
+  "derived_output": "Condition_Diagnosis",
+  "class_count": 8,
+  "class_counts": {
+    "Tuoi_Nuoc": 253,
+    "Bon_Phan_Ure": 231,
+    "Bo_Sung_Huu_Co": 686,
+    "Bon_SuperLan": 178,
+    "Bon_Voi_Nong_Nghiep": 789,
+    "Giam_Phan_Tang_Nuoc": 205,
+    "Bon_Phan_Kali": 108,
+    "Khong_Can_Bon": 50
+  },
+  "diagnosis_by_action": {
+    "Bo_Sung_Huu_Co": "Dat_Kiem",
+    "Bon_Phan_Kali": "Thieu_K",
+    "Bon_Phan_Ure": "Thieu_N",
+    "Bon_SuperLan": "Thieu_P",
+    "Bon_Voi_Nong_Nghiep": "Dat_Chua",
+    "Giam_Phan_Tang_Nuoc": "Thua_Dinh_Duong",
+    "Khong_Can_Bon": "Toi_Uu",
+    "Tuoi_Nuoc": "Dat_Kho"
+  },
+  "duplicate_rows": 0,
+  "missing_values": {
+    "Crop_Type": 0,
+    "Growth_Stage": 0,
+    "Temperature": 0,
+    "Humidity": 0,
+    "Soil_Moisture": 0,
+    "Soil_pH": 0,
+    "Nitrogen": 0,
+    "Phosphorus": 0,
+    "Potassium": 0,
+    "Condition_Diagnosis": 0,
+    "Fertilizer_Action": 0
+  },
+  "train_test_split": {
+    "test_size": 0.2,
+    "random_state": 42,
+    "stratified_by": "Fertilizer_Action",
+    "train_rows": 2000,
+    "test_rows": 500
+  },
+  "cross_validation": {
+    "folds": 5,
+    "selection_metric": "macro_f1",
+    "candidates": {
+      "ExtraTreesClassifier": {
+        "cv_macro_f1_mean": 0.7761049047485871,
+        "cv_macro_f1_std": 0.012684778746570202,
+        "cv_accuracy_mean": 0.8939999999999999
+      },
+      "RandomForestClassifier": {
+        "cv_macro_f1_mean": 0.8093844966099265,
+        "cv_macro_f1_std": 0.023627119370343116,
+        "cv_accuracy_mean": 0.929
+      },
+      "LogisticRegression": {
+        "cv_macro_f1_mean": 0.7982680399549109,
+        "cv_macro_f1_std": 0.01348139433913578,
+        "cv_accuracy_mean": 0.876
+      }
+    },
+    "selected_model": "RandomForestClassifier"
+  },
+  "holdout_metrics": {
+    "accuracy": 0.962,
+    "macro_f1": 0.8934681998117882,
+    "weighted_f1": 0.9606704120281927,
+    "classification_report": {
+      "Bo_Sung_Huu_Co": {
+        "precision": 1.0,
+        "recall": 0.9854014598540146,
+        "f1-score": 0.9926470588235294,
+        "support": 137.0
+      },
+      "Bon_Phan_Kali": {
+        "precision": 0.9047619047619048,
+        "recall": 0.9047619047619048,
+        "f1-score": 0.9047619047619048,
+        "support": 21.0
+      },
+      "Bon_Phan_Ure": {
+        "precision": 0.9574468085106383,
+        "recall": 0.9782608695652174,
+        "f1-score": 0.967741935483871,
+        "support": 46.0
+      },
+      "Bon_SuperLan": {
+        "precision": 0.918918918918919,
+        "recall": 0.9444444444444444,
+        "f1-score": 0.9315068493150684,
+        "support": 36.0
+      },
+      "Bon_Voi_Nong_Nghiep": {
+        "precision": 0.9937106918238994,
+        "recall": 1.0,
+        "f1-score": 0.9968454258675079,
+        "support": 158.0
+      },
+      "Giam_Phan_Tang_Nuoc": {
+        "precision": 0.7872340425531915,
+        "recall": 0.9024390243902439,
+        "f1-score": 0.8409090909090909,
+        "support": 41.0
+      },
+      "Khong_Can_Bon": {
+        "precision": 0.8,
+        "recall": 0.4,
+        "f1-score": 0.5333333333333333,
+        "support": 10.0
+      },
+      "Tuoi_Nuoc": {
+        "precision": 1.0,
+        "recall": 0.9607843137254902,
+        "f1-score": 0.98,
+        "support": 51.0
+      },
+      "accuracy": 0.962,
+      "macro avg": {
+        "precision": 0.9202590458210691,
+        "recall": 0.8845115020926644,
+        "f1-score": 0.8934681998117882,
+        "support": 500.0
+      },
+      "weighted avg": {
+        "precision": 0.9628130386508548,
+        "recall": 0.962,
+        "f1-score": 0.9606704120281927,
+        "support": 500.0
+      }
+    },
+    "confusion_matrix_labels": [
+      "Bo_Sung_Huu_Co",
+      "Bon_Phan_Kali",
+      "Bon_Phan_Ure",
+      "Bon_SuperLan",
+      "Bon_Voi_Nong_Nghiep",
+      "Giam_Phan_Tang_Nuoc",
+      "Khong_Can_Bon",
+      "Tuoi_Nuoc"
+    ],
+    "confusion_matrix": [
+      [
+        135,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        19,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        45,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        34,
+        1,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        158,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        1,
+        1,
+        0,
+        37,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        5,
+        4,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        49
+      ]
+    ]
+  },
+  "software": {
+    "scikit_learn": "1.9.1"
+  },
+  "artifact": "greenhouse_demo_model.joblib",
+  "trained_at_utc": "2026-11-02T00:23:05.508003+00:00",
+  "limitations": [
+    "The workbook is named Demo. Evaluation uses a random holdout from this workbook only.",
+    "No independent greenhouse trial, agronomist review, or calibration evidence was provided.",
+    "Predictions are experimental labels from the dataset and are not validated fertilizer prescriptions.",
+    "Numeric inputs outside the observed training range and unknown crop/stage labels should be rejected by the caller."
+  ]
+}
