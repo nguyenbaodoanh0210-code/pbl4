@@ -39,8 +39,8 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 DATASET_PATH = PROJECT_DIR / "data" / "greenhouse" / "Greenhouse_Demo_Dataset.xlsx"
-MODEL_PATH = PROJECT_DIR / "models" / "greenhouse_demo_model.joblib"
-REPORT_PATH = PROJECT_DIR / "models" / "greenhouse_demo_training_report.json"
+MODEL_PATH = PROJECT_DIR / "ml_models" / "greenhouse_demo_model.joblib"
+REPORT_PATH = PROJECT_DIR / "ml_models" / "greenhouse_demo_training_report.json"
 
 FEATURE_COLUMNS = [
     "Crop_Type",

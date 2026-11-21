@@ -1,43 +1,187 @@
-const {test}=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const vm=require('node:vm');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../app.js'),'utf8');
-function setup(initial='/'){
-  const state={user:{user_id:'test'},page:'home',greenhouses:[{greenhouse_id:'NK-01'}],devices:[{greenhouse_id:'NK-01',device_id:'D-01'}],greenhouseId:'NK-01',deviceId:'',detailId:'',creatingGreenhouse:false,metric:'soil_moisture',period:'day',authPage:'login'};
-  const location=new URL('http://local.test'+initial),stack=[location.pathname+location.search],entries=[null];let index=0,renders=0;
-  const listeners={};
-  const history={pushState(value,unused,url){stack.splice(++index);entries.splice(index);stack.push(url);entries.push(value);location.href='http://local.test'+url},replaceState(value,unused,url){stack[index]=url;entries[index]=value;location.href='http://local.test'+url}};
-  const context=vm.createContext({s:state,location,window:{history,scrollTo(){},addEventListener:(name,fn)=>listeners[name]=fn},URL,URLSearchParams,Object,metrics:[['soil_moisture'],['temperature']],pages:{home:[],greenhouses:[],history:[],advice:[],alerts:[]},render:()=>renders++,setProfileOpen(){}});
-  vm.runInContext(source.slice(source.indexOf('const routeFields='),source.indexOf('const esc='))+'\nfunction history(){}',context);
-  return {state,location,stack,entries,history,context,renders:()=>renders,back(){if(index>0){index--;location.href='http://local.test'+stack[index];listeners.popstate({state:entries[index]})}},forward(){if(index<stack.length-1){index++;location.href='http://local.test'+stack[index];listeners.popstate({state:entries[index]})}}};
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+// Strip ES module imports/exports for VM sandbox execution
+const routerSource = fs
+  .readFileSync(path.join(__dirname, '../js/controllers/router.js'), 'utf8')
+  .replace(/import\s*\{[^}]*\}\s*from\s*['"][^'"]*['"];?/g, '')
+  .replace(/export\s+(const|function)\s+/g, '$1 ');
+
+function setup(initial = '/') {
+  const PAGES = {
+    home: ['Giám sát môi trường', 'Environment Dashboard'],
+    history: ['Biểu đồ & Lịch sử', 'Analytics ngoài trời'],
+    greenhouses: ['Khu vườn của bạn', 'Quản lý khu vườn'],
+    camera: ['Chẩn đoán AI', 'Camera & Đa phương thức'],
+    advice: ['Gợi ý chăm sóc', 'Khuyến nghị'],
+    alerts: ['Thông báo', 'Theo dõi cảnh báo'],
+  };
+  const OUTDOOR_METRICS = [
+    ['temperature', 'Nhiệt độ không khí', '°C'],
+    ['humidity', 'Độ ẩm không khí', '%'],
+    ['light_level', 'Cường độ ánh sáng', 'Lux'],
+  ];
+  const PERIODS = [
+    ['hour', 'Giờ'],
+    ['day', 'Ngày'],
+    ['week', 'Tuần'],
+    ['month', 'Tháng'],
+  ];
+
+  const state = {
+    user: { user_id: 'test-user', full_name: 'Người dùng Test' },
+    page: 'home',
+    greenhouses: [{ greenhouse_id: 'garden-outdoor-01', name: 'Khu vườn ngoài trời' }],
+    areas: { 'garden-outdoor-01': [{ area_id: 'area-chili-01', name: 'Luống ớt' }] },
+    devices: [{ greenhouse_id: 'garden-outdoor-01', device_id: 'NODEMCU-01' }],
+    greenhouseId: 'garden-outdoor-01',
+    deviceId: '',
+    detailId: '',
+    creatingGreenhouse: false,
+    editingGreenhouse: false,
+    creatingDevice: false,
+    creatingArea: false,
+    editingAreaId: '',
+    metric: 'temperature',
+    period: 'day',
+    authPage: 'login',
+  };
+
+  const location = new URL('http://local.test' + initial);
+  const stack = [location.pathname + location.search];
+  const entries = [null];
+  let index = 0;
+  const listeners = {};
+
+  const history = {
+    pushState(value, unused, url) {
+      stack.splice(++index);
+      entries.splice(index);
+      stack.push(url);
+      entries.push(value);
+      location.href = 'http://local.test' + url;
+    },
+    replaceState(value, unused, url) {
+      stack[index] = url;
+      entries[index] = value;
+      location.href = 'http://local.test' + url;
+    },
+  };
+
+  const context = vm.createContext({
+    state,
+    PAGES,
+    OUTDOOR_METRICS,
+    PERIODS,
+    location,
+    window: { history, scrollTo() {}, addEventListener: (n, fn) => (listeners[n] = fn) },
+    URL,
+    URLSearchParams,
+    Object,
+  });
+
+  vm.runInContext(routerSource, context);
+
+  function navigateRoute(update, { replace = false } = {}) {
+    update();
+    context.writeRoute(replace);
+  }
+
+  return {
+    state,
+    location,
+    stack,
+    entries,
+    context,
+    navigateRoute,
+    back() {
+      if (index > 0) {
+        index--;
+        location.href = 'http://local.test' + stack[index];
+        if (listeners.popstate) listeners.popstate({ state: entries[index] });
+      }
+    },
+    forward() {
+      if (index < stack.length - 1) {
+        index++;
+        location.href = 'http://local.test' + stack[index];
+        if (listeners.popstate) listeners.popstate({ state: entries[index] });
+      }
+    },
+  };
 }
-test('browser back and forward restore menu, greenhouse detail and creation step',()=>{
-  const f=setup();f.context.writeRoute(true);
-  f.context.navigateRoute(()=>{f.state.page='greenhouses'});
-  f.context.navigateRoute(()=>{f.state.detailId='NK-01'});
-  assert.equal(f.location.search,'?page=greenhouses&detail=NK-01&gh=NK-01');
-  f.back();assert.equal(f.state.page,'greenhouses');assert.equal(f.state.detailId,'');
-  f.forward();assert.equal(f.state.detailId,'NK-01');
-  f.back();f.context.navigateRoute(()=>{f.state.creatingGreenhouse=true});
-  assert.equal(f.stack.length,3);assert.match(f.location.search,/create=1/);
-  f.back();assert.equal(f.state.creatingGreenhouse,false);f.forward();assert.equal(f.state.creatingGreenhouse,true);
+
+test('navigation to camera AI page creates reversible URL and history entry (Stage 4B)', () => {
+  const f = setup();
+  f.context.writeRoute(true);
+  assert.equal(f.location.search, '');
+
+  f.navigateRoute(() => {
+    f.state.page = 'camera';
+  });
+  assert.match(f.location.search, /page=camera/);
+  assert.equal(f.state.page, 'camera');
+
+  f.navigateRoute(() => {
+    f.state.page = 'home';
+  });
+  assert.equal(f.location.search, '');
 });
-test('filter and selected-device changes become reversible history entries',()=>{
-  const f=setup();f.context.writeRoute(true);
-  f.context.navigateRoute(()=>{f.state.page='history'});
-  f.context.navigateRoute(()=>{f.state.metric='temperature'},{scroll:false});
-  f.context.navigateRoute(()=>{f.state.period='week'},{scroll:false});
-  f.context.navigateRoute(()=>{f.state.deviceId='D-01'},{scroll:false});
-  assert.match(f.location.search,/device=D-01/);f.back();assert.equal(f.state.deviceId,'');f.back();assert.equal(f.state.period,'day');f.back();assert.equal(f.state.metric,'soil_moisture');f.forward();assert.equal(f.state.metric,'temperature');
+
+test('navigation to garden detail and area creation preserves context (Stage 4C)', () => {
+  const f = setup();
+  f.context.writeRoute(true);
+
+  f.navigateRoute(() => {
+    f.state.page = 'greenhouses';
+    f.state.detailId = 'garden-outdoor-01';
+  });
+  assert.match(f.location.search, /page=greenhouses/);
+  assert.match(f.location.search, /detail=garden-outdoor-01/);
+
+  f.navigateRoute(() => {
+    f.state.creatingGreenhouse = true;
+  });
+  assert.match(f.location.search, /create=1/);
 });
-test('auth steps have direct URLs and browser history',()=>{
-  const f=setup();f.state.user=null;f.context.writeRoute(true);
-  f.context.navigateRoute(()=>{f.state.authPage='register'});
-  assert.equal(f.location.search,'?auth=register');f.back();assert.equal(f.state.authPage,'login');f.forward();assert.equal(f.state.authPage,'register');
+
+test('outdoor metrics selection syncs with URL parameters', () => {
+  const f = setup();
+  f.context.writeRoute(true);
+
+  f.navigateRoute(() => {
+    f.state.page = 'history';
+    f.state.metric = 'humidity';
+    f.state.period = 'week';
+  });
+  assert.match(f.location.search, /metric=humidity/);
+  assert.match(f.location.search, /period=week/);
 });
-test('initial deep link can restore a greenhouse detail after data loads',()=>{
-  const f=setup('/?page=greenhouses&detail=NK-01&gh=NK-01');
-  f.context.applyRoute(f.context.readRoute());
-  assert.equal(f.state.page,'greenhouses');assert.equal(f.state.detailId,'NK-01');assert.equal(f.state.greenhouseId,'NK-01');
+
+test('unauthenticated user is restricted to auth query parameters', () => {
+  const f = setup();
+  f.state.user = null;
+  f.context.writeRoute(true);
+
+  f.navigateRoute(() => {
+    f.state.authPage = 'register';
+  });
+  assert.equal(f.location.search, '?auth=register');
+
+  f.navigateRoute(() => {
+    f.state.authPage = 'forgot';
+  });
+  assert.equal(f.location.search, '?auth=forgot');
+});
+
+test('deep link restores camera page and garden selection on load', () => {
+  const f = setup('/?page=camera&gh=garden-outdoor-01');
+  const route = f.context.readRoute();
+  f.context.applyRoute(route);
+
+  assert.equal(f.state.page, 'camera');
+  assert.equal(f.state.greenhouseId, 'garden-outdoor-01');
 });

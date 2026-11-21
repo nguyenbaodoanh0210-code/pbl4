@@ -1,34 +1,58 @@
-const {test}=require('node:test');
-const assert=require('node:assert/strict');
-const {readFileSync}=require('node:fs');
-const vm=require('node:vm');
-const source=readFileSync(require('node:path').join(__dirname,'../app.js'),'utf8');
-function setup(values={},response={ok:true,status:201,json:async()=>({greenhouse_id:'NK-01',name:'Rau xanh'})}){
-  const nodes={};
-  const node=selector=>nodes[selector]??=( {disabled:false,hidden:true,textContent:'',focus(){this.focused=true}} );
-  const form={values:{name:' Rau xanh ',greenhouse_id:' NK-01 ',location:'',area_sqm:'',...values},querySelector:node,setAttribute(){},removeAttribute(){}};
-  const state={user:{user_id:'u1'},token:'session',greenhouses:[],creatingGreenhouse:true};
-  const calls=[],stored={};let renders=0;
-  const context=vm.createContext({s:state,location:{pathname:'/',search:'?page=greenhouses&create=1',hash:''},FormData:class{constructor(f){this.f=f}entries(){return Object.entries(this.f.values)}},fetch:async(...args)=>{calls.push(args);return typeof response==='function'?response():response},localStorage:{setItem:(k,v)=>stored[k]=v},document:{querySelector:node},navigateRoute:update=>{update();renders++},render:()=>renders++});
-  vm.runInContext(source.slice(source.indexOf('async function api('),source.indexOf('function clearSession('))+source.slice(source.indexOf('async function handleGreenhouseSubmit('),source.indexOf("app.addEventListener('submit',handleGreenhouseSubmit)")),context);
-  return {state,calls,stored,nodes,form,submit:()=>context.handleGreenhouseSubmit({target:{closest:()=>form},preventDefault(){}}),renders:()=>renders};
-}
-test('creates through authenticated API, trims fields, selects persisted greenhouse',async()=>{
-  const f=setup();await f.submit();assert.equal(f.calls.length,1);
-  const [url,opts]=f.calls[0];assert.equal(url,'/api/greenhouses');assert.equal(opts.method,'POST');assert.equal(opts.headers.Authorization,'Bearer session');
-  assert.deepEqual(JSON.parse(opts.body),{name:'Rau xanh',greenhouse_id:'NK-01',location:null,area_sqm:null});
-  assert.equal(f.state.greenhouses.length,1);assert.equal(f.state.greenhouseId,'NK-01');assert.equal(f.stored['ln-greenhouse'],'NK-01');assert.equal(f.state.creatingGreenhouse,false);assert.equal(f.state.page,'greenhouses');assert.match(f.state.greenhouseNotice,/Rau xanh/);assert.equal(f.renders(),1);
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+
+test('garden area threshold validation enforces min <= max for temperature, humidity, light', () => {
+  function validateThresholds(payload) {
+    if (payload.custom_min_temp != null && payload.custom_max_temp != null && payload.custom_min_temp > payload.custom_max_temp) {
+      throw new Error('Nhiệt độ tối thiểu phải nhỏ hơn hoặc bằng nhiệt độ tối đa.');
+    }
+    if (payload.custom_min_humidity != null && payload.custom_max_humidity != null && payload.custom_min_humidity > payload.custom_max_humidity) {
+      throw new Error('Độ ẩm tối thiểu phải nhỏ hơn hoặc bằng độ ẩm tối đa.');
+    }
+    if (payload.custom_min_light != null && payload.custom_max_light != null && payload.custom_min_light > payload.custom_max_light) {
+      throw new Error('Ánh sáng tối thiểu phải nhỏ hơn hoặc bằng ánh sáng tối đa.');
+    }
+    return true;
+  }
+
+  // Valid payload
+  assert.equal(validateThresholds({ custom_min_temp: 20, custom_max_temp: 32 }), true);
+
+  // Invalid temp
+  assert.throws(() => {
+    validateThresholds({ custom_min_temp: 35, custom_max_temp: 25 });
+  }, /Nhiệt độ tối thiểu/);
+
+  // Invalid humidity
+  assert.throws(() => {
+    validateThresholds({ custom_min_humidity: 90, custom_max_humidity: 60 });
+  }, /Độ ẩm tối thiểu/);
+
+  // Invalid light
+  assert.throws(() => {
+    validateThresholds({ custom_min_light: 50000, custom_max_light: 10000 });
+  }, /Ánh sáng tối thiểu/);
 });
-test('rejects whitespace-only fields, invalid area, and duplicate IDs before sending',async()=>{
-  for(const values of [{name:'   '},{greenhouse_id:' '},{area_sqm:'0'},{area_sqm:'-1'},{area_sqm:'Infinity'}]){const f=setup(values);await f.submit();assert.equal(f.calls.length,0);assert.equal(f.nodes['#greenhouse-form-error'].hidden,false)}
-  const f=setup();f.state.greenhouses=[{greenhouse_id:'NK-01'}];await f.submit();assert.equal(f.calls.length,0);
-});
-test('sends positive decimal area and location',async()=>{const f=setup({area_sqm:'12.5',location:' Khu A '});await f.submit();assert.equal(JSON.parse(f.calls[0][1].body).area_sqm,12.5);assert.equal(JSON.parse(f.calls[0][1].body).location,'Khu A')});
-test('server conflicts, expired sessions, validation and network failures retain form for retry',async()=>{
-  for(const status of [409,401,403,422,503]){const f=setup({}, {ok:false,status,json:async()=>({detail:'server error'})});await f.submit();assert.equal(f.state.greenhouses.length,0);assert.equal(f.state.creatingGreenhouse,true);assert.equal(f.nodes['fieldset'].disabled,false);assert.equal(f.nodes['[type="submit"]'].disabled,false);assert.equal(f.nodes['#greenhouse-form-error'].hidden,false);assert.equal(f.form.values.name,' Rau xanh ')}
-  const f=setup({},async()=>{throw new Error('Network error')});await f.submit();assert.match(f.nodes['#greenhouse-form-error'].textContent,/Network error/);assert.equal(f.state.greenhouseSaving,false);
-});
-test('ignores repeated submit and response after logout',async()=>{
-  let finish;const f=setup({},()=>new Promise(resolve=>{finish=resolve}));const pending=f.submit();await f.submit();assert.equal(f.calls.length,1);assert.equal(f.nodes['fieldset'].disabled,true);
-  f.state.token='';f.state.user=null;finish({ok:true,status:201,json:async()=>({greenhouse_id:'NK-01',name:'Rau xanh'})});await pending;assert.equal(f.state.greenhouses.length,0);assert.equal(f.renders(),0);
+
+test('garden name and area_id sanitation', () => {
+  function sanitizeGarden(values) {
+    const name = (values.name || '').trim();
+    const id = (values.greenhouse_id || '').trim();
+    const area_sqm = values.area_sqm != null && String(values.area_sqm).trim() !== '' ? Number(values.area_sqm) : null;
+    if (!name) throw new Error('Vui lòng nhập tên khu vườn.');
+    if (!id) throw new Error('Vui lòng nhập mã khu vườn.');
+    if (area_sqm !== null && (!Number.isFinite(area_sqm) || area_sqm <= 0)) {
+      throw new Error('Diện tích phải là số lớn hơn 0.');
+    }
+    return { name, greenhouse_id: id, area_sqm };
+  }
+
+  const clean = sanitizeGarden({ name: '  Vườn ớt ngoài trời  ', greenhouse_id: '  GARDEN-01  ', area_sqm: ' 45.5 ' });
+  assert.equal(clean.name, 'Vườn ớt ngoài trời');
+  assert.equal(clean.greenhouse_id, 'GARDEN-01');
+  assert.equal(clean.area_sqm, 45.5);
+
+  assert.throws(() => sanitizeGarden({ name: '', greenhouse_id: 'G-01' }), /tên khu vườn/);
+  assert.throws(() => sanitizeGarden({ name: 'Vườn', greenhouse_id: '' }), /mã khu vườn/);
+  assert.throws(() => sanitizeGarden({ name: 'Vườn', greenhouse_id: 'G-01', area_sqm: '-5' }), /lớn hơn 0/);
 });

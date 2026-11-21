@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-MODEL_DIR = Path(__file__).resolve().parents[2] / "models"
+MODEL_DIR = Path(__file__).resolve().parents[2] / "ml_models"
 MODEL_PATH = MODEL_DIR / "chili_disease_model.keras"
 METADATA_PATH = MODEL_DIR / "chili_disease_model_metadata.json"
 MAX_IMAGE_PIXELS = 20_000_000

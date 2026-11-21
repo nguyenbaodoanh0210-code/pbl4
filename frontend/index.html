@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#f6f7ef" />
-    <meta name="description" content="Theo dõi nhà kính và dữ liệu cảm biến khu vườn của bạn." />
-    <title>Vườn</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="/workspace-layout.css" />
-    <link rel="stylesheet" href="/editorial-layout.css" />
-    <link rel="stylesheet" href="/auth-layout.css" />
+    <meta name="description" content="Hệ thống giám sát khu vườn thông minh ngoài trời, tự động tưới nước và nhận diện sức khỏe cây trồng." />
+    <title>Smart Garden — Khu vườn ngoài trời</title>
+    <link rel="stylesheet" href="/styles/base.css" />
+    <link rel="stylesheet" href="/styles/workspace.css" />
+    <link rel="stylesheet" href="/styles/editorial.css" />
+    <link rel="stylesheet" href="/styles/auth.css" />
+    <link rel="stylesheet" href="/styles/diagnosis.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -22,14 +23,15 @@
             <path class="brand-leaf-vein" d="M6 40C9 29 17.5 19.5 28.5 11.5"/>
           </svg>
           <div class="brand-copy">
-            <strong id="garden-name">Greenhouse</strong>
+            <strong id="garden-name">Smart Garden</strong>
           </div>
         </div>
         <span class="header-context">CHĂM VƯỜN, AN TÂM.</span>
         <nav class="bottom-nav" aria-label="Điều hướng chính">
           <button data-page="home" class="nav-item active"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.2"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.2"/></svg><small>Tổng quan</small></button>
           <button data-page="history" class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 20.5h18M5.5 17v-4M10 17V9M14.5 17v-6M19 17V4.5M4 10l5-4 4 2 6-5"/><path d="M16 3h3v3"/></svg><small>Lịch sử</small></button>
-          <button data-page="greenhouses" class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3.5 10 8.5-7 8.5 7v10.5h-17z"/><path d="M9 20.5v-7h6v7"/></svg><small>Nhà kính</small></button>
+          <button data-page="greenhouses" class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3.5 10 8.5-7 8.5 7v10.5h-17z"/><path d="M9 20.5v-7h6v7"/></svg><small>Khu vườn</small></button>
+          <button data-page="camera" class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><small>AI</small></button>
           <button data-page="advice" class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16c0-3-3-3.5-3-7a7 7 0 0 1 14 0c0 3.5-3 4-3 7ZM8 19h8M10 22h4M12 12v4M9.5 9.5 12 12l2.5-2.5"/></svg><small>Khuyến nghị</small></button>
           <button data-page="alerts" class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg><small>Thông báo</small></button>
         </nav>
@@ -42,7 +44,7 @@
         </div>
       </header>
       <main id="app" aria-live="polite">
-        <div class="loading-page"><span class="spinner"></span><p>Đang tải dữ liệu từ API…</p></div>
+        <div class="loading-page"><span class="spinner"></span><p>Đang tải dữ liệu…</p></div>
       </main>
       <footer class="site-footer"><div><strong>Mỗi ngày một chút xanh.</strong><span>Đồng hành cùng khu vườn của bạn.</span></div><span>Chăm vườn, an tâm.</span></footer>
     </div>

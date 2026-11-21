@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import User
+from ..models import User
 
 
 TOKEN_ISSUER = "smart-greenhouse-api"

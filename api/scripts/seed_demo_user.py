@@ -14,8 +14,8 @@ from sqlalchemy import DateTime, MetaData, func, inspect, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from app.auth import get_token_secret, hash_password, normalize_email
-from app.database import SessionLocal, engine
+from app.core.auth import get_token_secret, hash_password, normalize_email
+from app.core.database import SessionLocal, engine
 from app.models import User
 
 

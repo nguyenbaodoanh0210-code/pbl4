@@ -14,3 +14,18 @@ frontend/.env.*
 
 # Frontend dependencies
 frontend/node_modules/
+
+# Hardware & PlatformIO build artifacts
+**/.pio/
+**/.sconsign*
+*.o
+*.a
+*.bin
+*.elf
+
+
+# Uploaded ESP32-CAM images
+api/uploads/*
+!api/uploads/camera/
+api/uploads/camera/*
+!api/uploads/camera/.gitkeep

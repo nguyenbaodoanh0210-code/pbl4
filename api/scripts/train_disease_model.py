@@ -16,8 +16,8 @@ import random
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 DATASET_DIR = PROJECT_DIR / "data" / "chili_plant_disease"
-MODEL_PATH = PROJECT_DIR / "models" / "chili_disease_model.keras"
-METADATA_PATH = PROJECT_DIR / "models" / "chili_disease_model_metadata.json"
+MODEL_PATH = PROJECT_DIR / "ml_models" / "chili_disease_model.keras"
+METADATA_PATH = PROJECT_DIR / "ml_models" / "chili_disease_model_metadata.json"
 SPLITS = ("train", "val", "test")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 IMAGE_SIZE = 160

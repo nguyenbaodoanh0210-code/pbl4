@@ -1,6 +1,6 @@
 /* A single-row green header for the authenticated workspace. */
 .greenhouse-list-actions{display:flex;justify-content:flex-end;margin-bottom:24px}
-.add-greenhouse-button{width:auto;min-width:156px}
+.add-greenhouse-button,.add-device-button{width:auto;min-width:156px}
 .greenhouse-create{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,2fr);gap:clamp(24px,5vw,72px);max-width:1100px}
 .greenhouse-form-intro h2{margin:0 0 12px;font-size:21px;color:var(--green-dark)}
 .greenhouse-form-intro p{font-size:14px;line-height:1.7;color:#53665a;max-width:32ch}
@@ -163,3 +163,247 @@
 .app-shell:not(.auth-mode) .status-icon{font-size:15px;line-height:1}
 .app-shell:not(.auth-mode) .page-status span[aria-hidden]{font-size:20px;line-height:1}
 .app-shell:not(.auth-mode) .icon-tile{font-size:27px}
+
+/* Stage 4A — Outdoor Environment Dashboard (3 NodeMCU v2.0.0 metrics, Analytics & Pump Control) */
+.app-shell:not(.auth-mode) .dashboard-toolbar{flex-wrap:wrap}
+.app-shell:not(.auth-mode) .metric-grid.metric-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.app-shell:not(.auth-mode) .metric-top{display:flex;flex-direction:column;gap:4px}
+.app-shell:not(.auth-mode) .metric-sensor-tag{font-size:12px;color:#7a897f;padding-left:35px}
+.app-shell:not(.auth-mode) .metric-status{margin-top:14px}
+.app-shell:not(.auth-mode) .metric-danger .metric-value{color:var(--red)}
+.app-shell:not(.auth-mode) .metric-warning .metric-value{color:var(--amber)}
+
+.app-shell:not(.auth-mode) .dashboard-analytics-split{
+  display:grid;
+  grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);
+  gap:24px;
+  align-items:start;
+}
+.app-shell:not(.auth-mode) .analytics-card,
+.app-shell:not(.auth-mode) .pump-control-card{
+  background:#fff;
+  border:1px solid var(--line);
+  padding:24px;
+}
+.app-shell:not(.auth-mode) .analytics-header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:14px;
+}
+.app-shell:not(.auth-mode) .analytics-header .card-title{margin:4px 0 0}
+.app-shell:not(.auth-mode) .analytics-periods{min-width:220px}
+.app-shell:not(.auth-mode) .chart .chart-area{fill:#216b4b12;stroke:none}
+.app-shell:not(.auth-mode) .analytics-stats{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  margin-top:16px;
+  padding-top:16px;
+  border-top:1px solid var(--line);
+}
+.app-shell:not(.auth-mode) .analytics-stats span{display:block;font-size:12px;color:var(--muted)}
+.app-shell:not(.auth-mode) .analytics-stats strong{display:block;margin-top:4px;font:700 16px 'Manrope',sans-serif;color:var(--green-dark);font-variant-numeric:tabular-nums}
+.app-shell:not(.auth-mode) .analytics-footer{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line);
+}
+
+.app-shell:not(.auth-mode) .pump-card-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:18px;
+}
+.app-shell:not(.auth-mode) .pump-card-header .card-title{margin:4px 0 0}
+.app-shell:not(.auth-mode) .pump-mode-block{margin-bottom:16px}
+.app-shell:not(.auth-mode) .pump-mode-toggle{min-width:0;width:100%}
+.app-shell:not(.auth-mode) .pump-switch-panel{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  padding:16px;
+  border:1px solid var(--line);
+  border-radius:3px;
+  background:#f8faf6;
+}
+.app-shell:not(.auth-mode) .pump-switch-panel.is-on{
+  background:#edf6ee;
+  border-color:#c6dfc8;
+}
+.app-shell:not(.auth-mode) .pump-switch-copy strong{display:block;font-size:16px;color:var(--ink)}
+.app-shell:not(.auth-mode) .pump-toggle-btn{width:100%}
+.app-shell:not(.auth-mode) .pump-stop-btn{border-color:#d8b7b3;color:var(--red)}
+.app-shell:not(.auth-mode) .pump-stop-btn:not(:disabled):hover{background:var(--red-bg);border-color:var(--red)}
+.app-shell:not(.auth-mode) .pump-auto-note{margin:12px 0 0;color:#55665c}
+.app-shell:not(.auth-mode) .pump-feedback{margin:12px 0 0}
+.app-shell:not(.auth-mode) .pump-history{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.app-shell:not(.auth-mode) .pump-history-title{font:700 13px 'Manrope',sans-serif;color:var(--ink);margin-bottom:10px}
+.app-shell:not(.auth-mode) .pump-log-item{padding:10px 0;border-bottom:1px solid var(--line)}
+.app-shell:not(.auth-mode) .pump-log-item:last-child{border-bottom:0;padding-bottom:0}
+.app-shell:not(.auth-mode) .pump-log-head{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--ink)}
+.app-shell:not(.auth-mode) .pump-log-head span{font-size:12px;color:var(--muted)}
+.app-shell:not(.auth-mode) .pump-log-item .tiny{margin:4px 0 0;font-size:13px}
+
+@media(max-width:1023px){
+  .app-shell:not(.auth-mode) .dashboard-analytics-split{grid-template-columns:1fr}
+}
+@media(max-width:767px){
+  .app-shell:not(.auth-mode) .metric-grid.metric-grid-3{grid-template-columns:1fr}
+  .app-shell:not(.auth-mode) .metric-grid.metric-grid-3 .metric{border-right:0;border-bottom:1px solid var(--line)}
+  .app-shell:not(.auth-mode) .metric-grid.metric-grid-3 .metric:last-child{border-bottom:0}
+  .app-shell:not(.auth-mode) .analytics-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* ── Stage 4C: Outdoor Planting Areas & Crop Threshold Styles ─────── */
+.area-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.area-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.area-card:hover {
+  border-color: #a8c6af;
+  box-shadow: 0 2px 10px rgba(46,74,54,0.06);
+}
+
+.area-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.area-tag {
+  font: 700 10px/1.2 'Manrope', sans-serif;
+  letter-spacing: .08em;
+  color: var(--green);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.area-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.area-meta {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.area-crop-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f4f8f4;
+  border-radius: 3px;
+  border: 1px solid #dcebde;
+  margin-bottom: 16px;
+}
+.area-crop-icon {
+  font-size: 18px;
+}
+.area-crop-text strong {
+  font-size: 13.5px;
+  color: var(--green-dark);
+}
+
+/* Matrix of effective thresholds */
+.threshold-matrix {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #fafbfa;
+  border: 1px solid #e7ede8;
+  border-radius: 3px;
+}
+.threshold-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.th-label {
+  font-size: 11px;
+  color: #617468;
+  font-weight: 600;
+}
+.th-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.area-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.area-actions .link-button {
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Form override section */
+.threshold-override-box {
+  grid-column: 1 / -1;
+  background: #f7faf7;
+  border: 1px solid #d4e4d6;
+  border-radius: 4px;
+  padding: 18px;
+  margin-top: 8px;
+}
+.override-box-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--green-dark);
+}
+.override-box-desc {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: #55665c;
+  line-height: 1.5;
+}
+.form-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 14px;
+}
+@media(max-width: 600px) {
+  .form-grid-2col {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .threshold-matrix {
+    grid-template-columns: 1fr;
+  }
+}
+

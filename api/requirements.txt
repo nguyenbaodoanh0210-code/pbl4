@@ -8,3 +8,5 @@ joblib
 pandas
 pyserial
 scikit-learn
+python-multipart
+aiofiles
