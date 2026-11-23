@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
 import os
 from pathlib import Path
 import re
@@ -17,6 +19,7 @@ from ..ai.disease import (
     DiseaseModelUnavailable,
     InvalidDiseaseImage,
     _image_dimensions,
+    MAX_IMAGE_PIXELS,
     predict_disease,
 )
 from ..models import (
@@ -31,6 +34,7 @@ from ..models import (
 from .access_service import resolve_effective_thresholds
 from .mqtt_publisher import camera_cmd_topic, publish_mqtt_json
 from .multimodal_service import MODEL_VERSION, fuse_multimodal_diagnosis
+from .sensor_validation import quality_problems, utc
 
 
 API_ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +44,13 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 VALID_TRIGGER_TYPES = {"MANUAL", "SCHEDULED", "ENV_ALERT"}
 VALID_CAMERA_STATUSES = {"NEW", "REVIEWED", "RESOLVED"}
+
+
+def validate_camera_binding(device, greenhouse, area=None):
+    if device.deleted_at or device.status != "ACTIVE" or device.device_type not in {"CAMERA", "CAMERA_NODE"}:
+        raise HTTPException(422, "Thiết bị phải là camera đang hoạt động")
+    if device.greenhouse_id != greenhouse.greenhouse_id or device.area_id != (area.area_id if area else None):
+        raise HTTPException(422, "Camera không thuộc đúng vườn và khu vực đã chọn")
 
 
 def _demo_vision_fallback(image_bytes: bytes, content_type: str | None = None) -> dict:
@@ -69,7 +80,7 @@ def serialize_camera_log(item: CameraLog) -> dict:
         "sensor_log_id": item.sensor_log_id,
         "image_url": item.image_url,
         "image_endpoint": f"/api/camera/logs/{item.log_id}/image",
-        "timestamp": item.timestamp.isoformat() if item.timestamp else None,
+        "timestamp": utc(item.timestamp).isoformat() if item.timestamp else None,
         "trigger_type": item.trigger_type,
         "cnn_diagnosis": item.cnn_diagnosis,
         "cnn_confidence": item.cnn_confidence,
@@ -95,7 +106,7 @@ def save_camera_image(image_bytes: bytes, expected_content_type: str | None = No
     detected_type, width, height = _image_dimensions(image_bytes)
     if expected_content_type and detected_type != expected_content_type:
         raise InvalidDiseaseImage("Content-Type không khớp định dạng ảnh")
-    if width < 1 or height < 1:
+    if width < 1 or height < 1 or width * height > MAX_IMAGE_PIXELS:
         raise InvalidDiseaseImage("Kích thước ảnh không hợp lệ")
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -157,17 +168,15 @@ def _fetch_sensor_context(
     area_id: str | None,
     window_minutes: int,
 ) -> tuple[SensorLog | None, list[dict]]:
-    """Find latest SensorLog and recent window for the area (falling back to garden sensor node)."""
+    """Use fresh, valid measurements in this exact area; never borrow another area's climate."""
     sensor_query = db.query(Device).filter(
         Device.greenhouse_id == greenhouse_id,
         Device.device_type == "SENSOR_NODE",
         Device.deleted_at.is_(None),
+        Device.status == "ACTIVE",
+        Device.area_id == area_id,
     )
-    sensor_devices = []
-    if area_id:
-        sensor_devices = sensor_query.filter(Device.area_id == area_id).all()
-    if not sensor_devices:
-        sensor_devices = sensor_query.all()
+    sensor_devices = sensor_query.all()
     if not sensor_devices:
         return None, []
 
@@ -179,6 +188,8 @@ def _fetch_sensor_context(
         .first()
     )
     if latest_log is None:
+        return None, []
+    if quality_problems(latest_log):
         return None, []
 
     window_start = latest_log.timestamp - timedelta(minutes=window_minutes)
@@ -213,9 +224,21 @@ def run_camera_diagnosis(
     device: Device | None = None,
     trigger_type: str = "MANUAL",
     predictor: Callable[[bytes, str | None], dict] | None = None,
+    capture_id: str | None = None,
 ) -> dict:
     """Save ESP32-CAM image, run CNN + Multimodal fusion, persist CameraLog + Alert + Recommendation."""
     trig = (trigger_type or "MANUAL").strip().upper()
+    if device:
+        validate_camera_binding(device, greenhouse, area)
+    if capture_id:
+        if not device or not re.fullmatch(r"cam-[0-9a-f]{32}", capture_id):
+            raise HTTPException(422, "Mã yêu cầu chụp không hợp lệ")
+        existing = db.query(CameraLog).filter_by(log_id=capture_id).first()
+        if existing:
+            if existing.device_id != device.device_id or existing.greenhouse_id != greenhouse.greenhouse_id or existing.area_id != (area.area_id if area else None):
+                raise HTTPException(409, "Mã chụp đã thuộc thiết bị/khu vực khác")
+            return {"camera_log": serialize_camera_log(existing), "multimodal": None,
+                    "notification_created": False, "recommendation_id": None, "duplicate": True}
     if trig not in VALID_TRIGGER_TYPES:
         raise HTTPException(
             status_code=422,
@@ -227,131 +250,139 @@ def run_camera_diagnosis(
     except InvalidDiseaseImage as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
-    # 1. Run CNN disease inference
-    infer_fn = predictor or predict_disease
-    model_version = MODEL_VERSION
+    committed = False
     try:
-        cnn_result = infer_fn(image_bytes, detected_type)
-        if isinstance(cnn_result, dict):
-            model_version = str(cnn_result.get("model_version") or cnn_result.get("model") or MODEL_VERSION)
-    except InvalidDiseaseImage as exc:
-        (UPLOAD_DIR / filename).unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail=str(exc)) from None
-    except DiseaseModelUnavailable as exc:
-        allow_fallback = os.getenv("ALLOW_DEMO_VISION_FALLBACK", "false").lower() == "true"
-        if allow_fallback and predictor is None:
-            cnn_result = _demo_vision_fallback(image_bytes, detected_type)
-            model_version = cnn_result["model_version"]
-        else:
+        # 1. Run CNN disease inference
+        infer_fn = predictor or predict_disease
+        model_version = MODEL_VERSION
+        try:
+            cnn_result = infer_fn(image_bytes, detected_type)
+            if isinstance(cnn_result, dict):
+                model_version = str(cnn_result.get("model_version") or cnn_result.get("model") or MODEL_VERSION)
+        except InvalidDiseaseImage as exc:
             (UPLOAD_DIR / filename).unlink(missing_ok=True)
-            raise HTTPException(status_code=503, detail=str(exc)) from None
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        except DiseaseModelUnavailable as exc:
+            allow_fallback = os.getenv("ALLOW_DEMO_VISION_FALLBACK", "false").lower() == "true"
+            if allow_fallback and predictor is None:
+                cnn_result = _demo_vision_fallback(image_bytes, detected_type)
+                model_version = cnn_result["model_version"]
+            else:
+                (UPLOAD_DIR / filename).unlink(missing_ok=True)
+                raise HTTPException(status_code=503, detail=str(exc)) from None
 
-    # 2. Fetch DHT22 + LDR Light context & outdoor crop thresholds
-    thresholds = resolve_effective_thresholds(db, area=area, greenhouse=greenhouse)
-    latest_sensor, env_history = _fetch_sensor_context(
-        db,
-        greenhouse.greenhouse_id,
-        area.area_id if area else None,
-        int(thresholds.get("fungal_duration_minutes", 60)),
-    )
-    env_snapshot = (
-        {
-            "temperature": latest_sensor.temperature,
-            "humidity": latest_sensor.humidity,
-            "light_level": latest_sensor.light_level,
-        }
-        if latest_sensor is not None
-        else None
-    )
-
-    # 3. Run Multimodal Fusion
-    fused = fuse_multimodal_diagnosis(
-        cnn_result=cnn_result,
-        env_snapshot=env_snapshot,
-        env_history=env_history,
-        crop_config=thresholds,
-        model_version=model_version,
-    )
-
-    now = datetime.now(timezone.utc)
-    log_id = f"cam-{uuid.uuid4().hex[:12]}"
-    camera_log = CameraLog(
-        log_id=log_id,
-        device_id=device.device_id if device else None,
-        greenhouse_id=greenhouse.greenhouse_id,
-        area_id=area.area_id if area else None,
-        sensor_log_id=latest_sensor.log_id if latest_sensor else None,
-        image_url=f"uploads/camera/{filename}",
-        timestamp=now,
-        trigger_type=trig,
-        cnn_diagnosis=fused["cnn_diagnosis"],
-        cnn_confidence=fused["cnn_confidence"],
-        cnn_scores=fused["cnn_scores"],
-        ai_diagnosis=fused["final_diagnosis"],
-        confidence_score=fused["multimodal_confidence"],
-        multimodal_reason=fused["multimodal_reason"],
-        recommended_action=fused["recommended_action"],
-        temperature_at_capture=fused["env_snapshot"]["temperature"],
-        humidity_at_capture=fused["env_snapshot"]["humidity"],
-        light_at_capture=fused["env_snapshot"]["light_level"],
-        env_window_summary=fused["env_window_summary"],
-        model_version=fused["model_version"],
-        status="NEW",
-    )
-    db.add(camera_log)
-    if device is not None:
-        device.is_online = True
-        device.last_updated = now
-    db.flush()
-
-    created_notification = None
-    created_recommendation = None
-    if (not fused["is_healthy"]) and fused["multimodal_confidence"] >= 0.65:
-        rec_id = f"rec-{uuid.uuid4().hex[:12]}"
-        created_recommendation = Recommendation(
-            rec_id=rec_id,
-            device_id=latest_sensor.device_id if latest_sensor else (device.device_id if device else None),
-            area_id=area.area_id if area else None,
-            camera_log_id=log_id,
-            source_type="MULTIMODAL",
-            created_at=now,
-            condition_diagnosis=f"{fused['final_diagnosis']} ({fused['multimodal_confidence'] * 100:.0f}%)",
-            fertilizer_action=fused["recommended_action"],
-            dosage=0.0,
-            action_note=fused["multimodal_reason"],
-            status="PENDING",
+        # 2. Fetch DHT22 + LDR Light context & outdoor crop thresholds
+        thresholds = resolve_effective_thresholds(db, area=area, greenhouse=greenhouse)
+        latest_sensor, env_history = _fetch_sensor_context(
+            db,
+            greenhouse.greenhouse_id,
+            area.area_id if area else None,
+            int(thresholds.get("fungal_duration_minutes", 60)),
         )
-        db.add(created_recommendation)
-        db.flush()
+        env_snapshot = (
+            {
+                "temperature": latest_sensor.temperature,
+                "humidity": latest_sensor.humidity,
+                "light_level": latest_sensor.light_level,
+            }
+            if latest_sensor is not None
+            else None
+        )
 
-        zone_name = area.name if area else greenhouse.name
-        severity = "CRITICAL" if fused["multimodal_confidence"] >= 0.80 else "WARNING"
-        created_notification = Notification(
-            notification_id=f"notif-{uuid.uuid4().hex[:12]}",
-            user_id=greenhouse.user_id,
+        # 3. Run Multimodal Fusion
+        fused = fuse_multimodal_diagnosis(
+            cnn_result=cnn_result,
+            env_snapshot=env_snapshot,
+            env_history=env_history,
+            crop_config=thresholds,
+            model_version=model_version,
+        )
+
+        now = datetime.now(timezone.utc)
+        log_id = capture_id or f"cam-{uuid.uuid4().hex}"
+        camera_log = CameraLog(
+            log_id=log_id,
+            device_id=device.device_id if device else None,
             greenhouse_id=greenhouse.greenhouse_id,
             area_id=area.area_id if area else None,
-            device_id=device.device_id if device else None,
-            recommendation_id=rec_id,
-            camera_log_id=log_id,
-            category="DISEASE_ALERT",
-            severity=severity,
-            title=f"Cảnh báo {fused['final_diagnosis']} tại {zone_name} ({fused['multimodal_confidence'] * 100:.0f}%)",
-            message=fused["multimodal_reason"],
-            status="UNREAD",
-            created_at=now,
+            sensor_log_id=latest_sensor.log_id if latest_sensor else None,
+            image_url=f"uploads/camera/{filename}",
+            timestamp=now,
+            trigger_type=trig,
+            cnn_diagnosis=fused["cnn_diagnosis"],
+            cnn_confidence=fused["cnn_confidence"],
+            cnn_scores=fused["cnn_scores"],
+            ai_diagnosis=fused["final_diagnosis"],
+            confidence_score=fused["multimodal_confidence"],
+            multimodal_reason=fused["multimodal_reason"],
+            recommended_action=fused["recommended_action"],
+            temperature_at_capture=fused["env_snapshot"]["temperature"],
+            humidity_at_capture=fused["env_snapshot"]["humidity"],
+            light_at_capture=fused["env_snapshot"]["light_level"],
+            env_window_summary=fused["env_window_summary"],
+            model_version=fused["model_version"],
+            status="NEW",
         )
-        db.add(created_notification)
+        db.add(camera_log)
+        if device is not None:
+            device.is_online = True
+            device.last_updated = now
+        db.flush()
 
-    db.commit()
-    db.refresh(camera_log)
+        created_notification = None
+        created_recommendation = None
+        if (not fused["is_healthy"]) and fused["multimodal_confidence"] >= 0.65:
+            rec_id = f"rec-{uuid.uuid4().hex[:12]}"
+            created_recommendation = Recommendation(
+                rec_id=rec_id,
+                device_id=latest_sensor.device_id if latest_sensor else (device.device_id if device else None),
+                area_id=area.area_id if area else None,
+                camera_log_id=log_id,
+                source_type="MULTIMODAL",
+                created_at=now,
+                condition_diagnosis=f"{fused['final_diagnosis']} ({fused['multimodal_confidence'] * 100:.0f}%)",
+                fertilizer_action=fused["recommended_action"],
+                dosage=0.0,
+                action_note=fused["multimodal_reason"],
+                status="PENDING",
+            )
+            db.add(created_recommendation)
+            db.flush()
 
-    return {
-        "camera_log": serialize_camera_log(camera_log),
-        "multimodal": fused,
-        "notification_created": created_notification is not None,
-        "recommendation_id": created_recommendation.rec_id if created_recommendation else None,
-    }
+            zone_name = area.name if area else greenhouse.name
+            severity = "CRITICAL" if fused["multimodal_confidence"] >= 0.80 else "WARNING"
+            created_notification = Notification(
+                notification_id=f"notif-{uuid.uuid4().hex[:12]}",
+                user_id=greenhouse.user_id,
+                greenhouse_id=greenhouse.greenhouse_id,
+                area_id=area.area_id if area else None,
+                device_id=device.device_id if device else None,
+                recommendation_id=rec_id,
+                camera_log_id=log_id,
+                category="DISEASE_ALERT",
+                severity=severity,
+                title=f"Cảnh báo {fused['final_diagnosis']} tại {zone_name} ({fused['multimodal_confidence'] * 100:.0f}%)",
+                message=fused["multimodal_reason"],
+                status="UNREAD",
+                created_at=now,
+            )
+            db.add(created_notification)
+
+        db.commit()
+        committed = True
+        db.refresh(camera_log)
+
+        return {
+            "camera_log": serialize_camera_log(camera_log),
+            "multimodal": fused,
+            "notification_created": created_notification is not None,
+            "recommendation_id": created_recommendation.rec_id if created_recommendation else None,
+        }
+    except Exception:
+        db.rollback()
+        if not committed:
+            (UPLOAD_DIR / filename).unlink(missing_ok=True)
+        raise
 
 
 def trigger_esp32_capture(
@@ -361,22 +392,35 @@ def trigger_esp32_capture(
     trigger_type: str = "MANUAL",
 ) -> dict:
     trig = (trigger_type or "MANUAL").strip().upper()
+    if device is None:
+        raise HTTPException(422, "Cần chọn camera cụ thể")
+    validate_camera_binding(device, greenhouse, area)
     if trig not in VALID_TRIGGER_TYPES:
         raise HTTPException(
             status_code=422,
             detail="trigger_type phải là MANUAL, SCHEDULED hoặc ENV_ALERT",
         )
     now = datetime.now(timezone.utc)
+    capture_id = f"cam-{uuid.uuid4().hex}"
     payload = {
         "command": "CAPTURE",
+        "capture_id": capture_id,
+        "expires_at": int(now.timestamp()) + 60,
         "trigger_type": trig,
         "greenhouse_id": greenhouse.greenhouse_id,
         "area_id": area.area_id if area else None,
         "device_id": device.device_id if device else None,
         "timestamp": now.isoformat(),
     }
-    mqtt_result = publish_mqtt_json(camera_cmd_topic(greenhouse.greenhouse_id), payload)
+    secret = os.getenv("DEVICE_INGEST_TOKEN", "").strip()
+    if secret:
+        signed = f"{capture_id}|{device.device_id}|{greenhouse.greenhouse_id}|{trig}|{payload['expires_at']}"
+        payload["signature"] = hmac.new(secret.encode(), signed.encode(), hashlib.sha256).hexdigest()
+        mqtt_result = publish_mqtt_json(camera_cmd_topic(greenhouse.greenhouse_id), payload)
+    else:
+        mqtt_result = {"published": False, "error": "Thiếu DEVICE_INGEST_TOKEN để ký lệnh camera"}
     return {
+        "capture_id": capture_id,
         "greenhouse_id": greenhouse.greenhouse_id,
         "area_id": area.area_id if area else None,
         "device_id": device.device_id if device else None,

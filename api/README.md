@@ -143,6 +143,20 @@ curl.exe -X POST -H "Content-Type: image/jpeg" --data-binary "@leaf.jpg" http://
 
 ## MQTT and utilities
 
+### Chụp ảnh ESP32-CAM (bản sửa 23/11/2026)
+
+- Cài đủ `requirements.txt`, đặc biệt `python-multipart` cho ảnh tải từ web/board.
+- Chọn camera ACTIVE thuộc đúng vườn/khu vực. API trả `capture_id`; board phải gửi lại mã này trong `/api/camera/diagnose`. Web đợi tối đa 90 giây cho đúng bản ghi; không dùng ảnh cũ để báo thành công.
+- Nạp firmware mới ở `../hardware/esp32_cam/esp32cam_firmware.ino`. Sao chép `config.example.h` sang `config.h` (Git bỏ qua), điền mạng, IP LAN của API, ID camera/vườn, token thiết bị và broker riêng. Không dùng `127.0.0.1` làm IP API trên board. API cần lắng nghe địa chỉ LAN và cho phép cổng tương ứng trong mạng nội bộ.
+- Giao thức MQTT dùng `command=CAPTURE`, camera cụ thể, mã chụp, hạn nhận 60 giây và chữ ký HMAC. Board đồng bộ giờ qua NTP và kiểm chữ ký bằng `DEVICE_INGEST_TOKEN`. Firmware cũ đọc `action` không tương thích; phải nạp lại để chụp từ web.
+- Upload trả HTTP 201 là thành công. HTTP 4xx/5xx hoặc timeout không được firmware coi là thành công. Lượt upload lại cùng mã không tạo thêm bản ghi.
+- Ảnh và lịch sử yêu cầu đăng nhập và đúng quyền sở hữu vườn. Không còn đường dẫn ảnh công khai dự phòng.
+- Ảnh được lưu ở ổ chạy API, không nằm trong Neon. Khi nhiều người chạy API riêng với cùng database, ảnh do máy khác lưu sẽ không có trên máy mình. Để dùng chung ảnh cần một API lưu trữ chung hoặc object storage; không sao chép token/mật khẩu vào Git.
+- Endpoint cổng 81 của firmware hiện trả JPEG snapshot, không phải video 15 fps. Giao diện đã bỏ thông báo tốc độ/kết nối giả.
+- Token từng ghi cứng trong firmware cũ cần được thay đồng bộ trong `.env` và cấu hình các board; xóa khỏi file mới không xóa token khỏi lịch sử Git.
+
+Kiểm thử phần mềm gồm quyền ảnh, multipart, mã chụp, timeout, nhầm thiết bị, bản tin trùng, dữ liệu môi trường cũ và phản hồi broker thất bại. Kiểm tra trên phần cứng thật vẫn cần thực hiện sau khi nạp firmware.
+
 The MQTT subscriber validates the device token, device registration, timestamp, measurement ranges, and duplicate timestamps before storing telemetry. Configure `MQTT_BROKER`, `MQTT_PORT`, `MQTT_TOPIC`, optional username/password, and `MQTT_TLS` in `.env`. Each payload must carry `DEVICE_INGEST_TOKEN` as `device_token`. Use a private broker with TLS and ACLs outside demos.
 
 From the `api` directory, run:

@@ -32,6 +32,7 @@ function diseaseLabel(key) {
 }
 
 function severityClass(key) {
+  if (['healthy', 'khỏe mạnh', 'lá khỏe mạnh', 'ot_khoe_manh'].includes(String(key).toLowerCase())) return 'ok';
   return DISEASE_SEVERITY[key] || 'warn';
 }
 
@@ -51,12 +52,14 @@ function fmtDate(ts) {
   return new Date(ts).toLocaleString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+    timeZone: 'Asia/Ho_Chi_Minh',
   });
 }
 
 function statusPill(status) {
   const map = {
     PENDING: ['Đang xử lý', 'pill-warn'],
+    NEW: ['Chưa xem xét', 'pill-neutral'],
     REVIEWED: ['Đã xem xét', 'pill-ok'],
     RESOLVED: ['Đã xử lý', 'pill-ok'],
     FLAGGED: ['Cần chú ý', 'pill-danger'],
@@ -82,27 +85,31 @@ function envSnapshot(ctx) {
 // ─── ESP32-CAM Viewfinder & Scanner Screen (Centerpiece) ───────────────────────
 
 function renderEsp32CamScanner() {
-  const camDevices = state.devices.filter((d) => d.device_type === 'CAMERA' || d.device_type === 'CAMERA_NODE');
   const areas = state.areas[state.greenhouseId] || [];
-  const activeDevice = camDevices[0]?.device_id || 'ESP32-CAM-01';
+  if (!areas.some(a => a.area_id === state.cameraAreaId)) state.cameraAreaId = '';
+  const camDevices = state.devices.filter(d => ['CAMERA', 'CAMERA_NODE'].includes(d.device_type) &&
+    d.status === 'ACTIVE' && d.greenhouse_id === state.greenhouseId &&
+    (!state.cameraAreaId || d.area_id === state.cameraAreaId));
+  const activeDevice = camDevices.find(d => d.device_id === state.cameraDeviceId)?.device_id || camDevices[0]?.device_id || '';
+  const busy = state.cameraTriggerBusy || state.diagnosisLoading;
 
   // Determine current image to display in viewfinder:
   // 1. Live stream URL if active and enabled
   // 2. Currently selected diagnosis log image
   // 3. Most recent camera log image
   // 4. Default leaf sample
-  const latestLog = state.diagnosisResult || state.cameraLogs[0];
+  const latestLog = [state.diagnosisResult, ...state.cameraLogs].find(log => log?.greenhouse_id === state.greenhouseId);
   const currentImgUrl = latestLog ? cameraImageUrl(latestLog.log_id) : '/styles/leaf-sample.jpg';
   const isStream = state.esp32StreamMode === 'stream' && state.esp32StreamUrl;
   const feedSrc = isStream ? state.esp32StreamUrl : currentImgUrl;
 
   const areaOptions = areas.map((a) =>
-    '<option value="' + esc(a.area_id) + '">' + esc(a.name) + '</option>'
+    '<option value="' + esc(a.area_id) + '" ' + (a.area_id === state.cameraAreaId ? 'selected' : '') + '>' + esc(a.name) + '</option>'
   ).join('');
 
   const camDevOptions = camDevices.length
-    ? camDevices.map((d) => '<option value="' + esc(d.device_id) + '">' + esc(d.device_id) + '</option>').join('')
-    : '<option value="ESP32-CAM-01">ESP32-CAM-01 (Mặc định)</option>';
+    ? camDevices.map(d => '<option value="' + esc(d.device_id) + '" ' + (d.device_id === activeDevice ? 'selected' : '') + '>' + esc(d.device_id) + '</option>').join('')
+    : '<option value="">Chưa có camera hoạt động</option>';
 
   return (
     '<section class="esp32-scanner-section" aria-labelledby="esp32-scanner-title">' +
@@ -115,8 +122,7 @@ function renderEsp32CamScanner() {
     '<span class="esp32-tag">CAMERA NGOÀI VƯỜN</span>' +
     '</div>' +
     '<div class="esp32-meta-pills">' +
-    pill('Wi-Fi: Sẵn sàng', 'pill-ok') +
-    pill('Tốc độ cao', 'pill-neutral') +
+    pill('Kết nối camera chưa được xác minh', 'pill-neutral') +
     '</div>' +
     '</div>' +
 
@@ -124,11 +130,11 @@ function renderEsp32CamScanner() {
     '<div class="esp32-target-bar">' +
     '<div class="target-field">' +
     '<label for="trigger-cam-device">Thiết bị Camera</label>' +
-    '<select id="trigger-cam-device" class="target-select">' + camDevOptions + '</select>' +
+    '<select id="trigger-cam-device" class="target-select" ' + (busy ? 'disabled' : '') + '>' + camDevOptions + '</select>' +
     '</div>' +
     '<div class="target-field">' +
     '<label for="diag-area">Khu vực quét</label>' +
-    '<select id="diag-area" class="target-select"><option value="">— Toàn vườn —</option>' + areaOptions + '</select>' +
+    '<select id="diag-area" class="target-select" ' + (busy ? 'disabled' : '') + '><option value="">— Toàn vườn —</option>' + areaOptions + '</select>' +
     '</div>' +
     '</div>' +
 
@@ -156,9 +162,9 @@ function renderEsp32CamScanner() {
 
     // HUD: Top overlay info
     '<div class="hud-top-bar" aria-hidden="true">' +
-    '<div class="hud-item"><span class="hud-dot"></span> ' + (isStream ? 'VIDEO TRỰC TIẾP' : 'SẴN SÀNG CHỤP') + '</div>' +
+    '<div class="hud-item"><span class="hud-dot"></span> ' + (isStream ? 'NGUỒN ẢNH CAMERA' : latestLog ? 'ẢNH ĐÃ LƯU' : 'ẢNH MINH HỌA') + '</div>' +
     '<div class="hud-item">Độ nét cao</div>' +
-    '<div class="hud-item">' + (isStream ? '15 hình/giây' : 'Chụp nhanh') + '</div>' +
+    '<div class="hud-item">' + (isStream ? 'Phụ thuộc camera' : 'Chờ yêu cầu chụp') + '</div>' +
     '</div>' +
 
     // HUD: Bottom overlay info
@@ -183,7 +189,7 @@ function renderEsp32CamScanner() {
 
     // ── MAIN SCAN ACTION BUTTON (Bự, Nổi bật, Trọng tâm) ──
     '<div class="scan-action-wrap">' +
-    '<button type="button" class="btn-esp32-scan' + (state.cameraTriggerBusy || state.isScanning ? ' disabled' : '') + '" id="trigger-cam-btn"' + (state.cameraTriggerBusy || state.isScanning ? ' disabled' : '') + '>' +
+    '<button type="button" class="btn-esp32-scan" id="trigger-cam-btn"' + (busy || !activeDevice ? ' disabled' : '') + '>' +
     (state.isScanning
       ? '<span class="spinner-sm"></span> ĐANG CHỤP ẢNH TỪ CAMERA…'
       : '<span class="scan-icon">📸</span> CHỤP ẢNH & CHẨN ĐOÁN BỆNH LÁ') +
@@ -196,14 +202,14 @@ function renderEsp32CamScanner() {
     '<details class="esp32-stream-config">' +
     '<summary>⚙️ Cấu hình xem trực tiếp từ Camera</summary>' +
     '<div class="stream-config-body">' +
-    '<label for="esp32-stream-input">Địa chỉ xem video trực tiếp của Camera:' +
+    '<label for="esp32-stream-input">Địa chỉ nguồn ảnh của Camera:' +
     '<input type="url" id="esp32-stream-input" placeholder="Ví dụ: http://192.168.4.1:81/stream" value="' + esc(state.esp32StreamUrl || '') + '">' +
     '</label>' +
     '<div class="stream-config-actions">' +
     '<button type="button" class="btn btn-secondary btn-sm" id="btn-apply-stream">Áp dụng Stream</button>' +
     '<button type="button" class="btn btn-secondary btn-sm" id="btn-snapshot-mode">Dùng chế độ Chụp tĩnh</button>' +
     '</div>' +
-    '<small>Khi camera cùng mạng WiFi nội bộ, bạn có thể nhập IP camera để xem video trực tiếp trên kính ngắm.</small>' +
+    '<small>Camera cần cùng mạng nội bộ. Firmware AI-Thinker hiện trả một ảnh tĩnh mỗi lần tải; chỉ firmware hỗ trợ MJPEG mới có video liên tục.</small>' +
     '</div>' +
     '</details>' +
 
@@ -217,8 +223,8 @@ function renderEsp32CamScanner() {
     '<p>Kéo thả ảnh kiểm thử vào đây hoặc bấm chọn tệp (.jpg, .png)</p>' +
     '<div id="upload-preview" class="upload-preview" hidden></div>' +
     '</div>' +
-    '<input type="file" id="diagnose-file" name="file" accept="image/jpeg,image/png,image/webp" style="display:none" />' +
-    '<button type="submit" class="btn btn-secondary btn-full" ' + (state.diagnosisLoading ? 'disabled' : '') + '>' +
+    '<input type="file" id="diagnose-file" name="file" accept="image/jpeg,image/png" style="display:none" />' +
+    '<button type="submit" class="btn btn-secondary btn-full" ' + (busy || !state.greenhouseId ? 'disabled' : '') + '>' +
     (state.diagnosisLoading ? 'Đang phân tích tệp…' : 'Phân tích tệp ảnh này') +
     '</button>' +
     (state.diagnosisError ? '<p class="form-error">' + esc(state.diagnosisError) + '</p>' : '') +
@@ -259,7 +265,7 @@ function cameraLogCard(log) {
 // ─── Diagnosis Result Card ────────────────────────────────────────────────────
 
 function renderDiagnosisResult() {
-  const r = state.diagnosisResult;
+  const r = state.diagnosisResult?.greenhouse_id === state.greenhouseId ? state.diagnosisResult : null;
   if (!r) {
     return (
       '<div class="diag-empty">' +
@@ -291,23 +297,24 @@ function renderDiagnosisResult() {
     '<section class="diag-section">' +
     '<h4 class="diag-section-title">🔍 Nhận diện hình ảnh lá cây</h4>' +
     '<div class="diag-row"><span>Triệu chứng phát hiện</span><b>' + esc(diseaseLabel(r.cnn_diagnosis)) + '</b></div>' +
-    '<div class="diag-row"><span>Độ tin cậy hình ảnh</span>' + confidenceBar(r.cnn_confidence) + '</div>' +
+    '<div class="diag-row"><span>Điểm nhận diện ảnh</span>' + confidenceBar(r.cnn_confidence) + '</div>' +
+    '<p class="tiny">Điểm mô hình thử nghiệm, không phải độ chính xác đã kiểm chứng ngoài vườn.</p>' +
     '</section>' +
 
     // Multimodal fusion
     (r.final_diagnosis ? (
       '<section class="diag-section">' +
-      '<h4 class="diag-section-title">🌿 Kết luận tổng hợp (Hình ảnh + Thời tiết)</h4>' +
+      '<h4 class="diag-section-title">🌿 Kết luận tổng hợp (Ảnh + Cảm biến)</h4>' +
       '<div class="diag-row"><span>Chẩn đoán cuối</span><b class="diag-' + sevCls + '">' + esc(diseaseLabel(r.final_diagnosis)) + '</b></div>' +
       '<div class="diag-row"><span>Độ tin cậy tổng thể</span>' + confidenceBar(r.final_confidence) + '</div>' +
-      (deltaStr ? '<div class="diag-row"><span>Ảnh hưởng do thời tiết</span><b class="delta-' + (delta >= 0 ? 'up' : 'down') + '">' + deltaStr + '</b></div>' : '') +
+      (deltaStr && r.sensor_context ? '<div class="diag-row"><span>Điều chỉnh theo cảm biến</span><b class="delta-' + (delta >= 0 ? 'up' : 'down') + '">' + deltaStr + '</b></div>' : '') +
       '</section>'
     ) : '') +
 
     // Environment snapshot
     (r.sensor_context ? (
       '<section class="diag-section">' +
-      '<h4 class="diag-section-title">🌤️ Thời tiết ngoài vườn lúc chụp ảnh</h4>' +
+      '<h4 class="diag-section-title">🌤️ Số đo cảm biến gần thời điểm nhận ảnh</h4>' +
       envSnapshot(r.sensor_context) +
       '</section>'
     ) : '') +
@@ -322,7 +329,7 @@ function renderDiagnosisResult() {
 
     // Metadata
     '<div class="diag-meta">' +
-    '<span>Camera: <code>' + esc(r.device_id || 'ESP32-CAM') + '</code></span>' +
+    '<span>Nguồn: <code>' + esc(r.device_id || 'Ảnh tải lên') + '</code></span>' +
     '<span>Thời điểm: ' + esc(fmtDate(r.captured_at)) + '</span>' +
     '</div>' +
 
@@ -358,7 +365,7 @@ function renderCameraHistory() {
   }
   return (
     '<div class="cam-log-grid">' +
-    state.cameraLogs.map(cameraLogCard).join('') +
+    state.cameraLogs.filter(log => log.greenhouse_id === state.greenhouseId).map(cameraLogCard).join('') +
     '</div>'
   );
 }

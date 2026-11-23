@@ -9,7 +9,7 @@
      3. Lắng nghe lệnh chụp ảnh từ Web Server trên topic: smart_garden/{gh_id}/camera/cmd
      4. Khi có lệnh: Tự động chụp 1 bức ảnh JPEG và gửi trực tiếp qua HTTP POST Multipart
         lên Web Server tại endpoint: http://{SERVER_IP}:8000/api/camera/diagnose
-     5. Cung cấp luồng video xem trực tiếp (MJPEG Stream) trên cổng 81 cho Kính ngắm web
+     5. Cung cấp ảnh JPEG tĩnh trên cổng 81; không phải video MJPEG
  ========================================================================================================
  
  SƠ ĐỒ CHÂN NẠP CODE CHO BẠN PHỤ TRÁCH NỐI MẠCH:
@@ -32,26 +32,13 @@
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
+#include <mbedtls/md.h>
 
 // ========================================================================================================
 // 1. CẤU HÌNH THÔNG SỐ (BẠN CHỈ CẦN SỬA KHỐI NÀY PHÙ HỢP VỚI MẠNG NHÀ BẠN)
 // ========================================================================================================
-const char* WIFI_SSID       = "TEN_WIFI_NHA_BAN";             // Tên Wi-Fi
-const char* WIFI_PASSWORD   = "MAT_KHAU_WIFI";                // Mật khẩu Wi-Fi
-
-// Địa chỉ IP của máy tính đang chạy Web Server (Xem trong file CHAY_WEB.bat, ví dụ: 192.168.1.8)
-const char* SERVER_IP       = "192.168.1.8";                  
-const int   SERVER_PORT     = 8000;                           // Cổng Web Server
-
-// Thông tin định danh thiết bị Camera
-const char* GREENHOUSE_ID   = "garden-outdoor-01";            // Mã khu vườn
-const char* DEVICE_ID       = "ESP32CAM-CHILI-01";            // Mã camera (Ớt: ESP32CAM-CHILI-01, Xà lách: ESP32CAM-LETTUCE-01)
-const char* DEVICE_TOKEN    = "UP/maSoJ2+8pkBbYUiXqs5h/7cSqw5WvK2yaSaFw8jh6EMvMZuNrGfu5s+hyt8qG"; // Token xác thực API
-
-// MQTT Broker
-const char* MQTT_BROKER     = "test.mosquitto.org";
-const int   MQTT_PORT       = 1883;
-const char* TOPIC_CAMERA_CMD= "smart_garden/garden-outdoor-01/camera/cmd";
+#include "config.h"
 
 // ========================================================================================================
 // 2. ĐỊNH NGHĨA CHÂN CAMERA CHO MODEL AI-THINKER ESP32-CAM (OV2640)
@@ -78,13 +65,18 @@ const char* TOPIC_CAMERA_CMD= "smart_garden/garden-outdoor-01/camera/cmd";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
-WiFiServer streamServer(81); // Server phát luồng video MJPEG trên cổng 81
+WiFiServer streamServer(81); // Snapshot JPEG server, not a continuous MJPEG stream
+String pendingCaptureId;
+String pendingTrigger;
+String handledCaptures[8];
+uint8_t captureCursor = 0;
+unsigned long lastMqttAttempt = 0;
 
 // ========================================================================================================
 // 3. KHỞI TẠO CẤU HÌNH CAMERA OV2640
 // ========================================================================================================
 bool initCamera() {
-  camera_config_t config;
+  camera_config_t config = {};
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer   = LEDC_TIMER_0;
   config.pin_d0       = Y2_GPIO_NUM;
@@ -105,6 +97,7 @@ bool initCamera() {
   config.pin_reset    = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
+  config.grab_mode = CAMERA_GRAB_LATEST;
 
   // Kiểm tra có chip PSRAM hay không để chọn độ phân giải
   if (psramFound()) {
@@ -163,7 +156,7 @@ void setupWiFi() {
 // ========================================================================================================
 // 5. HÀM CHỤP ẢNH VÀ GỬI LÊN WEB SERVER (HTTP POST MULTIPART)
 // ========================================================================================================
-bool captureAndUploadImage() {
+bool captureAndUploadImage(const String& captureId, const String& triggerType) {
   Serial.println(F("\n[CHUP ANH] >>> Bat dau chup anh la cay theo lenh tu Web... <<<"));
 
   // Nháy đèn Flash nhẹ khi chụp
@@ -187,6 +180,7 @@ bool captureAndUploadImage() {
     esp_camera_fb_return(fb);
     return false;
   }
+  uploadClient.setTimeout(5000);
 
   // Tạo Boundary cho multipart/form-data
   String boundary = "----ESP32CamBoundarySmartGarden";
@@ -200,6 +194,8 @@ bool captureAndUploadImage() {
   String tail = "\r\n--" + boundary + "\r\n";
   tail += "Content-Disposition: form-data; name=\"device_id\"\r\n\r\n";
   tail += String(DEVICE_ID) + "\r\n";
+  tail += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"capture_id\"\r\n\r\n" + captureId + "\r\n";
+  tail += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"trigger_type\"\r\n\r\n" + triggerType + "\r\n";
   tail += "--" + boundary + "--\r\n";
 
   size_t totalLen = head.length() + fb->len + tail.length();
@@ -215,7 +211,18 @@ bool captureAndUploadImage() {
 
   // Gửi phần Body
   uploadClient.print(head);
-  uploadClient.write(fb->buf, fb->len);
+  size_t sent = 0;
+  unsigned long sendStarted = millis();
+  while (sent < fb->len && uploadClient.connected() && millis() - sendStarted < 15000) {
+    size_t count = uploadClient.write(fb->buf + sent, min(size_t(4096), fb->len - sent));
+    if (!count) { delay(1); continue; }
+    sent += count;
+  }
+  if (sent != fb->len) {
+    esp_camera_fb_return(fb);
+    uploadClient.stop();
+    return false;
+  }
   uploadClient.print(tail);
 
   // Giải phóng bộ nhớ Frame Buffer của Camera
@@ -224,16 +231,20 @@ bool captureAndUploadImage() {
   // Đọc phản hồi từ server
   Serial.println(F("[HTTP] Dang cho ket qua phan tich tu AI..."));
   unsigned long timeout = millis();
-  while (uploadClient.connected() && millis() - timeout < 10000) {
+  int responseStatus = 0;
+  while ((uploadClient.connected() || uploadClient.available()) && millis() - timeout < 60000) {
     if (uploadClient.available()) {
       String line = uploadClient.readStringUntil('\n');
-      if (line.startsWith("HTTP/1.1 200")) {
-        Serial.println(F("[HTTP] >>> GUI ANH VA CHAN DOAN AI THANH CONG (200 OK)! <<<"));
+      if (line.startsWith("HTTP/1.")) {
+        responseStatus = line.substring(9, 12).toInt();
+        break;
       }
     }
+    delay(5);
   }
   uploadClient.stop();
-  return true;
+  Serial.printf("[HTTP] Status: %d\n", responseStatus);
+  return responseStatus >= 200 && responseStatus < 300;
 }
 
 // ========================================================================================================
@@ -243,53 +254,68 @@ void onMqttCommand(char* topic, byte* payload, unsigned int length) {
   Serial.print(F("\n[MQTT] Nhan tin hieu tu topic: "));
   Serial.println(topic);
 
-  char message[256];
-  if (length >= sizeof(message)) length = sizeof(message) - 1;
-  memcpy(message, payload, length);
-  message[length] = '\0';
-  Serial.print(F("[MQTT] Noi dung lenh: "));
-  Serial.println(message);
-
-  // Phân tích JSON lệnh
-  StaticJsonDocument<256> doc;
-  DeserializationError err = deserializeJson(doc, message);
+  if (length > 1500 || pendingCaptureId.length()) return;
+  StaticJsonDocument<1536> doc;
+  DeserializationError err = deserializeJson(doc, payload, length);
   if (err) {
     Serial.println(F("[JSON] Loi giai ma lenh chup!"));
     return;
   }
 
-  const char* action = doc["action"];
+  const char* action = doc["command"];
   const char* targetDevice = doc["device_id"];
 
   // Nếu lệnh yêu cầu chụp ảnh đúng camera này (hoặc toàn vườn)
-  if (action && (strcmp(action, "CAPTURE") == 0 || strcmp(action, "TRIGGER") == 0)) {
-    if (!targetDevice || strcmp(targetDevice, DEVICE_ID) == 0 || strlen(targetDevice) == 0) {
-      captureAndUploadImage();
-    }
+  if (!action || strcmp(action, "CAPTURE") || !targetDevice || strcmp(targetDevice, DEVICE_ID)) return;
+  if (String(doc["greenhouse_id"] | "") != GREENHOUSE_ID) return;
+  String id = doc["capture_id"] | "";
+  if (!id.startsWith("cam-") || id.length() != 36) return;
+  for (unsigned i = 4; i < id.length(); ++i) if (!isxdigit(id[i])) return;
+  for (const auto& old : handledCaptures) if (old == id) return;
+  long now = time(nullptr), expires = doc["expires_at"] | 0L;
+  if (now < 1700000000 || expires < now || expires > now + 65) return;
+  String trigger = doc["trigger_type"] | "MANUAL";
+  if (trigger != "MANUAL" && trigger != "ENV_ALERT" && trigger != "SCHEDULED") return;
+  // Authenticate commands without transmitting the device token to the broker.
+  String signature = doc["signature"] | "";
+  if (signature.length() != 64) return;
+  String signedText = id + "|" + DEVICE_ID + "|" + GREENHOUSE_ID + "|" + trigger + "|" + String(expires);
+  unsigned char digest[32];
+  if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
+      reinterpret_cast<const unsigned char*>(DEVICE_TOKEN), strlen(DEVICE_TOKEN),
+      reinterpret_cast<const unsigned char*>(signedText.c_str()), signedText.length(), digest) != 0) return;
+  const char* hex = "0123456789abcdef";
+  unsigned char mismatch = 0;
+  for (int i = 0; i < 32; ++i) {
+    mismatch |= signature[i*2] ^ hex[digest[i] >> 4];
+    mismatch |= signature[i*2+1] ^ hex[digest[i] & 15];
   }
+  if (mismatch) return;
+  pendingCaptureId = id;
+  pendingTrigger = trigger;
 }
 
 // ========================================================================================================
 // 7. DUY TRÌ MQTT BROKER
 // ========================================================================================================
 void reconnectMQTT() {
-  while (!mqttClient.connected()) {
+  if (!mqttClient.connected() && millis() - lastMqttAttempt >= 5000) {
+    lastMqttAttempt = millis();
     Serial.print(F("[MQTT] Dang ket noi toi Broker: "));
     Serial.print(MQTT_BROKER);
     Serial.print(F("... "));
 
     String clientId = "ESP32CAM-Client-" + String((uint32_t)ESP.getEfuseMac(), HEX);
-    if (mqttClient.connect(clientId.c_str())) {
+    if (mqttClient.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
       Serial.println(F("THANH CONG!"));
-      mqttClient.subscribe(TOPIC_CAMERA_CMD);
+      String cameraTopic = String("smart_garden/") + GREENHOUSE_ID + "/camera/cmd";
+      mqttClient.subscribe(cameraTopic.c_str());
       Serial.print(F("[MQTT] Da lang nghe topic lenh: "));
-      Serial.println(TOPIC_CAMERA_CMD);
+      Serial.println(cameraTopic);
     } else {
       Serial.print(F("That bai, rc="));
       Serial.print(mqttClient.state());
       Serial.println(F(" -> Thu lai sau 3s..."));
-      delay(3000);
-      if (WiFi.status() != WL_CONNECTED) setupWiFi();
     }
   }
 }
@@ -314,7 +340,10 @@ void setup() {
 
   // Kết nối Wi-Fi & MQTT
   setupWiFi();
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+  mqttClient.setBufferSize(1600);
+  mqttClient.setSocketTimeout(3);
   mqttClient.setCallback(onMqttCommand);
 
   // Mở cổng Live Stream video
@@ -332,6 +361,12 @@ void loop() {
     reconnectMQTT();
   }
   mqttClient.loop();
+  if (pendingCaptureId.length()) {
+    String id = pendingCaptureId, trigger = pendingTrigger;
+    pendingCaptureId = "";
+    handledCaptures[captureCursor++ % 8] = id;
+    if (!captureAndUploadImage(id, trigger)) Serial.println(F("[CAPTURE] Upload failed; web will report timeout, not success."));
+  }
 
   // Nhỏ gọn: Duy trì kết nối live stream nếu có client kết nối xem video trên cổng 81
   WiFiClient client = streamServer.available();

@@ -79,6 +79,8 @@ export const state = {
   cameraUploadProgress: '',
   cameraTriggerBusy: false,
   cameraTriggerMsg: '',
+  cameraDeviceId: '',
+  cameraAreaId: '',
   esp32StreamUrl: localStorage.getItem('ln-esp32-stream') || '',
   esp32StreamMode: 'snapshot', // 'snapshot' | 'stream'
   isScanning: false,

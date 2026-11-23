@@ -14,10 +14,12 @@ import {
   refreshGardenAreas,
   refreshGardenActuators,
   triggerCapture,
+  getCaptureResult,
   updateGardenArea,
   updatePumpControl,
   uploadDiagnose,
 } from '../models/apiClient.js';
+import { captureAndWait } from '../models/cameraWorkflow.js';
 import {
   PAGES,
   PAGE_DESCRIPTIONS,
@@ -306,11 +308,14 @@ async function handleIrrigationConfig(event) {
 
 async function loadCameraHistory() {
   if (!state.user) return;
+  const gardenId = state.greenhouseId;
+  const userToken = state.token;
   state.cameraLogsLoading = true;
   state.cameraLogsError = '';
   render();
   try {
-    state.cameraLogs = await loadCameraLogs(state.greenhouseId, 30);
+    const logs = await loadCameraLogs(gardenId, 30);
+    if (state.greenhouseId === gardenId && state.token === userToken) state.cameraLogs = logs;
   } catch (err) {
     state.cameraLogsError = err.message || 'Không tải được lịch sử chẩn đoán.';
   } finally {
@@ -333,12 +338,13 @@ async function handleDiagnoseSubmit(event) {
 
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
-  const gardenSel = form.querySelector('[name="greenhouse_id"]');
-  const areaSel = form.querySelector('[name="area_id"]');
-  const triggerSel = form.querySelector('[name="trigger_type"]');
-  if (gardenSel?.value) formData.append('greenhouse_id', gardenSel.value);
-  if (areaSel?.value) formData.append('area_id', areaSel.value);
-  if (triggerSel?.value) formData.append('trigger_type', triggerSel.value);
+  const gardenId = state.greenhouseId;
+  const userToken = state.token;
+  if (!gardenId || state.cameraTriggerBusy || state.diagnosisLoading) return;
+  formData.append('greenhouse_id', gardenId);
+  const areaId = document.querySelector('#diag-area')?.value;
+  if (areaId) formData.append('area_id', areaId);
+  formData.append('trigger_type', 'MANUAL');
 
   state.diagnosisLoading = true;
   state.diagnosisError = '';
@@ -347,6 +353,7 @@ async function handleDiagnoseSubmit(event) {
 
   try {
     const result = await uploadDiagnose(formData);
+    if (state.greenhouseId !== gardenId || state.token !== userToken) return;
     state.diagnosisResult = result;
     state.cameraUploadProgress = 'Phân tích hoàn tất!';
     // Refresh logs list
@@ -363,9 +370,13 @@ async function handleDiagnoseSubmit(event) {
 
 async function handleTriggerCapture() {
   const deviceSel = document.querySelector('#trigger-cam-device');
-  const deviceId = deviceSel?.value || 'ESP32-CAM-01';
-  if (state.cameraTriggerBusy || state.isScanning) return;
+  const deviceId = deviceSel?.value;
+  if (state.cameraTriggerBusy || state.isScanning || state.diagnosisLoading) return;
+  if (!deviceId) { state.cameraTriggerMsg = 'Chưa có camera hoạt động trong khu vực đã chọn.'; render(); return; }
   const areaId = document.querySelector('#diag-area')?.value || '';
+  const gardenId = state.greenhouseId;
+  const userToken = state.token;
+  const isCurrent = () => state.greenhouseId === gardenId && state.token === userToken && state.page === 'camera';
 
   state.cameraTriggerBusy = true;
   state.isScanning = true;
@@ -373,20 +384,19 @@ async function handleTriggerCapture() {
   render();
 
   try {
-    await triggerCapture(deviceId, areaId || undefined);
-    state.cameraTriggerMsg = 'Đã gửi lệnh MQTT tới vi điều khiển ' + deviceId + '. Đang xử lý ảnh và chẩn đoán AI...';
-    render();
-
-    // Give ESP32-CAM time to capture & push, then reload logs
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    state.cameraLogs = await loadCameraLogs(state.greenhouseId, 30);
-    if (state.cameraLogs.length > 0) {
-      state.diagnosisResult = state.cameraLogs[0];
+    const result = await captureAndWait({
+      trigger: () => triggerCapture(deviceId, areaId || undefined, gardenId),
+      getResult: getCaptureResult, isCurrent,
+      onDispatched: () => { state.cameraTriggerMsg = 'Đã gửi lệnh. Đang chờ đúng ảnh mới từ ' + deviceId + '…'; render(); },
+    });
+    if (result && isCurrent()) {
+      state.diagnosisResult = result;
+      state.cameraLogs = [result, ...state.cameraLogs.filter(log => log.log_id !== result.log_id)];
       state.cameraTriggerMsg = '✓ Quét và chẩn đoán bệnh lá hoàn tất từ ESP32-CAM (' + deviceId + ')!';
     }
   } catch (err) {
     if (handleAuthExpiry(err)) { writeRoute(true); return; }
-    state.cameraTriggerMsg = 'Lưu ý: ' + (err.message || 'Không gửi được lệnh MQTT tới vi điều khiển.');
+    if (isCurrent()) state.cameraTriggerMsg = 'Lưu ý: ' + (err.message || 'Không gửi được lệnh MQTT tới vi điều khiển.');
   } finally {
     state.cameraTriggerBusy = false;
     state.isScanning = false;
@@ -419,7 +429,8 @@ function setupDropzone() {
     const file = fileInput.files[0];
     if (!file || !preview) return;
     const url = URL.createObjectURL(file);
-    preview.innerHTML = '<img src="' + url + '" alt="Ảnh đã chọn" /><span class="preview-name">' + file.name + '</span>';
+    preview.innerHTML = '<img src="' + url + '" alt="Ảnh đã chọn" /><span class="preview-name">' + esc(file.name) + '</span>';
+    preview.querySelector('img').onload = () => URL.revokeObjectURL(url);
     preview.hidden = false;
   });
 
@@ -802,6 +813,12 @@ function bindEvents() {
   appEl.addEventListener('submit', handleAreaSubmit);
   appEl.addEventListener('submit', handleIrrigationConfig);
   appEl.addEventListener('change', event => {
+    if (event.target.id === 'trigger-cam-device') { state.cameraDeviceId = event.target.value; render(); }
+    if (event.target.id === 'diag-area') {
+      state.cameraAreaId = event.target.value;
+      state.cameraDeviceId = '';
+      render();
+    }
     if (event.target.id === 'pump-area') {
       state.pumpAreaId = event.target.value;
       state.pumpError = '';
@@ -1084,6 +1101,12 @@ function bindEvents() {
     if (event.target.id === 'gh') {
       navigateRoute(() => {
         state.greenhouseId = event.target.value;
+        state.cameraDeviceId = '';
+        state.cameraAreaId = '';
+        state.cameraLogs = [];
+        state.diagnosisResult = null;
+        state.cameraTriggerMsg = '';
+        state.diagnosisError = '';
         state.detailId = '';
         state.editingGreenhouse = false;
         state.creatingDevice = false;
@@ -1094,6 +1117,7 @@ function bindEvents() {
         state.pumpError = '';
         localStorage.setItem('ln-greenhouse', state.greenhouseId);
       }, { scroll: false });
+      if (state.page === 'camera') loadCameraHistory();
     } else if (event.target.id === 'device') {
       navigateRoute(() => {
         state.deviceId = event.target.value;

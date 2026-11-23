@@ -45,4 +45,5 @@ api/data/irrigation/*.csv
 !api/data/irrigation/template.csv
 api/data/irrigation/external/
 hardware/nodemcu_v2/config.h
+hardware/esp32_cam/config.h
 .taste-skill/

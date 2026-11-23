@@ -8,6 +8,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
+from starlette.formparsers import MultiPartException, MultiPartParser
 from sqlalchemy.orm import Session
 
 from ..core.auth import bearer_scheme, decode_access_token, get_current_user
@@ -28,9 +30,16 @@ from ..services.camera_service import (
     run_camera_diagnosis,
     serialize_camera_log,
     trigger_esp32_capture,
+    validate_camera_binding,
 )
 
 router = APIRouter(prefix="/api/camera", tags=["camera & multimodal AI"])
+
+
+class BoundedCameraMultipartParser(MultiPartParser):
+    # The complete request is bounded before parsing. Keep these small uploads in
+    # memory instead of spilling to Windows' potentially full C: temporary drive.
+    spool_max_size = MAX_IMAGE_BYTES + 65536
 
 
 def _authenticate_user_or_device(
@@ -80,6 +89,7 @@ async def diagnose_camera_image(
     area_id: Optional[str] = Query(default=None),
     device_id: Optional[str] = Query(default=None),
     trigger_type: str = Query(default="MANUAL"),
+    capture_id: Optional[str] = Query(default=None),
     authorization: Optional[str] = Header(default=None),
     x_device_token: Optional[str] = Header(default=None, alias="X-Device-Token"),
     db: Session = Depends(get_db),
@@ -92,28 +102,42 @@ async def diagnose_camera_image(
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     expected_image_type: str | None = None
 
+    if content_type not in {"multipart/form-data", "image/jpeg", "image/png"}:
+        raise HTTPException(415, "Chỉ hỗ trợ ảnh JPEG/PNG hoặc multipart/form-data")
+    # Bound the whole request before parsing multipart or reading a file into RAM.
+    limit = MAX_IMAGE_BYTES + (65536 if content_type == "multipart/form-data" else 0)
+    buf = bytearray()
+    async for chunk in request.stream():
+        if len(buf) + len(chunk) > limit:
+            raise HTTPException(413, "Ảnh vượt quá giới hạn 10 MB")
+        buf.extend(chunk)
     if content_type == "multipart/form-data":
-        form = await request.form()
+        async def body_stream():
+            yield bytes(buf)
+        try:
+            form = await BoundedCameraMultipartParser(request.headers, body_stream(),
+                max_files=1, max_fields=8, max_part_size=65536).parse()
+        except MultiPartException:
+            raise HTTPException(400, "Biểu mẫu ảnh không hợp lệ hoặc vượt giới hạn") from None
         upload = form.get("file") or form.get("image")
         if upload is None or not hasattr(upload, "read"):
+            await form.close()
             raise HTTPException(status_code=422, detail="Thiếu trường tệp ảnh (file)")
-        image_bytes = await upload.read()
+        image_bytes = await upload.read(MAX_IMAGE_BYTES + 1)
+        upload_ct = (getattr(upload, "content_type", None) or "").split(";", 1)[0].strip().lower()
+        await form.close()
         if len(image_bytes) > MAX_IMAGE_BYTES:
             raise HTTPException(status_code=413, detail="Ảnh vượt quá giới hạn 10 MB")
-        upload_ct = (getattr(upload, "content_type", None) or "").split(";", 1)[0].strip().lower()
-        if upload_ct in {"image/jpeg", "image/png"}:
-            expected_image_type = upload_ct
+        if upload_ct not in {"image/jpeg", "image/png"}:
+            raise HTTPException(415, "Chỉ hỗ trợ ảnh JPEG hoặc PNG")
+        expected_image_type = upload_ct
         greenhouse_id = str(form.get("greenhouse_id") or greenhouse_id or "").strip() or None
         area_id = str(form.get("area_id") or area_id or "").strip() or None
         device_id = str(form.get("device_id") or device_id or "").strip() or None
         trigger_type = str(form.get("trigger_type") or trigger_type or "MANUAL").strip()
+        capture_id = str(form.get("capture_id") or capture_id or "").strip() or None
     elif content_type in {"image/jpeg", "image/png"}:
         expected_image_type = content_type
-        buf = bytearray()
-        async for chunk in request.stream():
-            buf.extend(chunk)
-            if len(buf) > MAX_IMAGE_BYTES:
-                raise HTTPException(status_code=413, detail="Ảnh vượt quá giới hạn 10 MB")
         image_bytes = bytes(buf)
     else:
         raise HTTPException(
@@ -122,6 +146,10 @@ async def diagnose_camera_image(
         )
 
     # Resolve device, area, and greenhouse
+    if is_device and not device_id:
+        raise HTTPException(422, "Thiết bị phải gửi device_id")
+    if capture_id and not is_device:
+        raise HTTPException(422, "capture_id chỉ dành cho ảnh trả về từ camera")
     device = None
     if device_id:
         if is_device:
@@ -169,7 +197,9 @@ async def diagnose_camera_image(
         else:
             area = require_area_access(greenhouse.greenhouse_id, area_id, db, current_user)
 
-    return run_camera_diagnosis(
+    if device:
+        validate_camera_binding(device, greenhouse, area)
+    return await run_in_threadpool(run_camera_diagnosis,
         db=db,
         greenhouse=greenhouse,
         image_bytes=image_bytes,
@@ -177,6 +207,7 @@ async def diagnose_camera_image(
         area=area,
         device=device,
         trigger_type=trigger_type,
+        capture_id=capture_id,
     )
 
 
@@ -204,6 +235,19 @@ def capture_trigger(
         if body.device_id
         else None
     )
+    if device is None:
+        cameras = db.query(Device).filter(Device.greenhouse_id == gh_id,
+            Device.device_type.in_(["CAMERA", "CAMERA_NODE"]), Device.status == "ACTIVE",
+            Device.deleted_at.is_(None))
+        if area:
+            cameras = cameras.filter(Device.area_id == area.area_id)
+        choices = cameras.limit(2).all()
+        if len(choices) != 1:
+            raise HTTPException(422, "Chọn một camera đang hoạt động trong vườn")
+        device = choices[0]
+    if area is None and device.area_id:
+        area = require_area_access(gh_id, device.area_id, db, current_user)
+    validate_camera_binding(device, greenhouse, area)
     return trigger_esp32_capture(
         greenhouse=greenhouse,
         area=area,
@@ -293,23 +337,19 @@ def get_camera_log_image(
         if authorization and authorization.lower().startswith("bearer ")
         else token
     )
-    if raw_token:
-        try:
-            user_id = decode_access_token(raw_token)
-            user = db.query(User).filter(User.user_id == user_id).first()
-            if user:
-                item = _require_camera_log_access(log_id, db, user)
-                path, media_type = resolve_stored_image_path(item.image_url)
-                return FileResponse(path, media_type=media_type)
-        except Exception:
-            pass
+    user = _image_user(raw_token, db)
+    item = _require_camera_log_access(log_id, db, user)
+    path, media_type = resolve_stored_image_path(item.image_url)
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "private, no-store"})
 
-    # Fallback cho thẻ <img> trình duyệt hiển thị ảnh mẫu trong khu vườn
-    item = db.query(CameraLog).filter(CameraLog.log_id == log_id).first()
-    if item:
-        path, media_type = resolve_stored_image_path(item.image_url)
-        return FileResponse(path, media_type=media_type)
-    raise HTTPException(status_code=404, detail="Không tìm thấy ảnh")
+
+def _image_user(token, db):
+    if not token:
+        raise HTTPException(401, "Cần đăng nhập để xem ảnh")
+    user = db.query(User).filter_by(user_id=decode_access_token(token)).first()
+    if user is None:
+        raise HTTPException(401, "Tài khoản không còn tồn tại")
+    return user
 
 
 @router.get("/images/{filename}")
@@ -319,22 +359,16 @@ def get_uploaded_camera_image(
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    path, media_type = resolve_uploaded_filename(filename)
     raw_token = (
         authorization.split(" ", 1)[1].strip()
         if authorization and authorization.lower().startswith("bearer ")
         else token
     )
-    if raw_token:
-        try:
-            user_id = decode_access_token(raw_token)
-            user = db.query(User).filter(User.user_id == user_id).first()
-            if user:
-                return FileResponse(path, media_type=media_type)
-        except Exception:
-            pass
-
-    # Cho phép hiển thị ảnh upload nếu tệp tồn tại
-    if path.exists():
-        return FileResponse(path, media_type=media_type)
-    raise HTTPException(status_code=404, detail="Không tìm thấy ảnh")
+    user = _image_user(raw_token, db)
+    item = db.query(CameraLog).filter(CameraLog.image_url.in_([
+        f"uploads/camera/{filename}", f"/api/camera/images/{filename}"])).first()
+    if item is None:
+        raise HTTPException(404, "Không tìm thấy ảnh")
+    _require_camera_log_access(item.log_id, db, user)
+    path, media_type = resolve_uploaded_filename(filename)
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "private, no-store"})

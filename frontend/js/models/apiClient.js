@@ -4,6 +4,7 @@
  */
 
 import { state, clearSession } from './store.js';
+import { normalizeCameraResult } from './cameraWorkflow.js';
 
 export async function apiRequest(path, opts = {}) {
   const isFormData = typeof FormData !== 'undefined' && opts.body instanceof FormData;
@@ -141,11 +142,16 @@ export async function deleteGardenArea(gardenId, areaId) {
 
 export async function loadCameraLogs(gardenId, limit = 30) {
   const qs = gardenId ? `?greenhouse_id=${encodeURIComponent(gardenId)}&limit=${limit}` : `?limit=${limit}`;
-  return apiRequest('/api/camera/logs' + qs);
+  return (await apiRequest('/api/camera/logs' + qs)).map(normalizeCameraResult);
 }
 
 export async function uploadDiagnose(formData) {
-  return apiRequest('/api/camera/diagnose', { method: 'POST', body: formData });
+  return normalizeCameraResult(await apiRequest('/api/camera/diagnose', { method: 'POST', body: formData }));
+}
+
+export async function getCaptureResult(captureId) {
+  return normalizeCameraResult(await apiRequest('/api/camera/logs/' + encodeURIComponent(captureId),
+    { signal: AbortSignal.timeout(10000) }));
 }
 
 export async function triggerCapture(deviceId, areaId, greenhouseId = state.greenhouseId) {
@@ -156,10 +162,10 @@ export async function triggerCapture(deviceId, areaId, greenhouseId = state.gree
 }
 
 export async function patchCameraLogStatus(logId, status) {
-  return apiRequest('/api/camera/logs/' + encodeURIComponent(logId) + '/status', {
+  return normalizeCameraResult(await apiRequest('/api/camera/logs/' + encodeURIComponent(logId) + '/status', {
     method: 'PATCH',
     body: JSON.stringify({ status }),
-  });
+  }));
 }
 
 export function cameraImageUrl(logId) {

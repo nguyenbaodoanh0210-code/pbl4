@@ -5,7 +5,10 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-_temp = tempfile.TemporaryDirectory(prefix="pbl4-tests-")
+# Keep test databases/images on the project drive, not the often-small Windows C: drive.
+_temp_root = Path(__file__).resolve().parents[1] / ".pytest_cache"
+_temp_root.mkdir(parents=True, exist_ok=True)
+_temp = tempfile.TemporaryDirectory(prefix="pbl4-tests-", dir=_temp_root)
 os.environ["DATABASE_URL"] = "sqlite:///" + (Path(_temp.name) / "test.db").as_posix()
 os.environ["AUTH_TOKEN_SECRET"] = "test-only-not-production-secret-20261122"
 os.environ["MQTT_PUBLISH_ENABLED"] = "false"

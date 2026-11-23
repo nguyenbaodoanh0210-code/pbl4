@@ -141,7 +141,7 @@ def _check_abnormal_environment(
                 category="ENV_ALERT",
                 severity=severity,
                 title=f"Cảnh báo môi trường tại {zone_name}",
-                message="; ".join(reasons) + ". Hệ thống đã kích hoạt ESP32-cam kiểm tra lá cây.",
+                message="; ".join(reasons) + ". Cần kiểm tra ảnh lá cây và tình trạng thực tế.",
                 status="UNREAD",
                 created_at=datetime.now(timezone.utc),
             )
@@ -149,19 +149,15 @@ def _check_abnormal_environment(
         alert_created = True
 
     camera_result = {"published": False}
-    if greenhouse is not None:
-        camera_result = publish_mqtt_json(
-            camera_cmd_topic(greenhouse.greenhouse_id),
-            {
-                "command": "CAPTURE",
-                "trigger_type": "ENV_ALERT",
-                "greenhouse_id": greenhouse.greenhouse_id,
-                "area_id": area.area_id if area else None,
-                "source_device_id": device.device_id,
-                "reasons": reasons,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-        )
+    if greenhouse is not None and alert_created:
+        from .camera_service import trigger_esp32_capture
+        cameras = db.query(Device).filter(Device.greenhouse_id == greenhouse.greenhouse_id,
+            Device.area_id == (area.area_id if area else None),
+            Device.device_type.in_(["CAMERA", "CAMERA_NODE"]), Device.status == "ACTIVE",
+            Device.deleted_at.is_(None)).all()
+        for camera in cameras:
+            result = trigger_esp32_capture(greenhouse, area, camera, "ENV_ALERT")
+            camera_result["published"] = camera_result["published"] or result["dispatched"]
 
     return {
         "alert_created": alert_created,
