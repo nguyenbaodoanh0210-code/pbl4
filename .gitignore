@@ -29,3 +29,20 @@ api/uploads/*
 !api/uploads/camera/
 api/uploads/camera/*
 !api/uploads/camera/.gitkeep
+
+# Local runtime files and tool caches
+api/.env.*
+!api/.env.example
+api/api-runtime.*.log
+**/.pytest_cache/
+**/.ruff_cache/
+**/.DS_Store
+**/Thumbs.db
+
+# Local irrigation observations and model-training runs
+api/ml_models/irrigation/
+api/data/irrigation/*.csv
+!api/data/irrigation/template.csv
+api/data/irrigation/external/
+hardware/nodemcu_v2/config.h
+.taste-skill/

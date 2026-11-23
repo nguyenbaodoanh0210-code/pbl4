@@ -77,8 +77,8 @@ export async function loadWorkspaceData() {
         state.actuators[garden.greenhouse_id] = await apiRequest(
           '/api/greenhouses/' + encodeURIComponent(garden.greenhouse_id) + '/actuators'
         );
-      } catch {
-        state.actuators[garden.greenhouse_id] = { actuators: [], recent_logs: [] };
+        } catch (error) {
+          state.actuators[garden.greenhouse_id] = { actuators: [], recent_logs: [], error: error.message };
       }
     }),
   ]);

@@ -1,0 +1,203 @@
+{
+  "dataset": "SIO custom synthetic irrigation dataset",
+  "data_source": "external_synthetic",
+  "source": {
+    "license": "No explicit license observed on repository root; kept locally for evaluation, not redistributed",
+    "download_url": "https://raw.githubusercontent.com/Abijith-U0245/SIO---Smart-Irrigation-Optimization/fb421ab52d070cb9dce6c2db28d0f95fcec96105/irrigation_dataset.csv",
+    "downloaded_at_utc": "2026-11-22T14:17:29.6258274Z",
+    "sha256": "607C30A69E55BD8110B43A0BDFF6AB7CEB86965DE43B51700803683848CED14B",
+    "provenance": "Author describes as custom synthetic irrigation dataset",
+    "repository": "https://github.com/Abijith-U0245/SIO---Smart-Irrigation-Optimization",
+    "commit": "fb421ab52d070cb9dce6c2db28d0f95fcec96105"
+  },
+  "catboost_version": "1.2.10",
+  "rows": 2000,
+  "split": {
+    "method": "random stratified 70/15/15, seed=42; no timestamps supplied",
+    "train": 1400,
+    "validation": 300,
+    "test": 300
+  },
+  "automatic_control_approved": false,
+  "excluded": [
+    "ID",
+    "Soil_pH",
+    "other target columns from either model's inputs"
+  ],
+  "crop_counts": {
+    "Tomato": 271,
+    "Rice": 270,
+    "Maize": 261,
+    "Cotton": 252,
+    "Sugarcane": 245,
+    "Soybean": 238,
+    "Potato": 235,
+    "Wheat": 228
+  },
+  "baseline": {
+    "majority_accuracy_pct": 64.0,
+    "median_water_mae_mm": 20.84963333333333
+  },
+  "experiments": {
+    "available_inputs": {
+      "features": [
+        "Crop_Type",
+        "Growth_Stage",
+        "Soil_Moisture_pct",
+        "Temperature_C",
+        "Humidity_pct"
+      ],
+      "classifier_accuracy_pct": 88.0,
+      "correct": 264,
+      "test_count": 300,
+      "classification_report": {
+        "No": {
+          "precision": 0.8529411764705882,
+          "recall": 0.8055555555555556,
+          "f1-score": 0.8285714285714286,
+          "support": 108.0
+        },
+        "Yes": {
+          "precision": 0.8939393939393939,
+          "recall": 0.921875,
+          "f1-score": 0.9076923076923077,
+          "support": 192.0
+        },
+        "accuracy": 0.88,
+        "macro avg": {
+          "precision": 0.8734402852049911,
+          "recall": 0.8637152777777778,
+          "f1-score": 0.8681318681318682,
+          "support": 300.0
+        },
+        "weighted avg": {
+          "precision": 0.8791800356506239,
+          "recall": 0.88,
+          "f1-score": 0.8792087912087914,
+          "support": 300.0
+        }
+      },
+      "confusion_matrix_labels": [
+        "No",
+        "Yes"
+      ],
+      "confusion_matrix": [
+        [
+          87,
+          21
+        ],
+        [
+          15,
+          177
+        ]
+      ],
+      "water_mae_mm": 9.20863502560959,
+      "water_rmse_mm": 11.071237217664505,
+      "water_r2": 0.8124984435497338,
+      "water_within_5mm_pct": 30.666666666666664,
+      "water_within_10mm_pct": 59.66666666666667,
+      "negative_water_predictions": 3,
+      "random_forest": {
+        "classifier_accuracy_pct": 87.66666666666667,
+        "water_mae_mm": 9.329720678108467,
+        "water_rmse_mm": 11.395869293468124,
+        "water_r2": 0.8013413483803674,
+        "confusion_matrix": [
+          [
+            85,
+            23
+          ],
+          [
+            14,
+            178
+          ]
+        ]
+      }
+    },
+    "with_weather_context": {
+      "features": [
+        "Crop_Type",
+        "Growth_Stage",
+        "Soil_Moisture_pct",
+        "Temperature_C",
+        "Humidity_pct",
+        "Rainfall_7day_mm",
+        "Solar_Radiation_MJm2"
+      ],
+      "classifier_accuracy_pct": 94.66666666666667,
+      "correct": 284,
+      "test_count": 300,
+      "classification_report": {
+        "No": {
+          "precision": 0.9509803921568627,
+          "recall": 0.8981481481481481,
+          "f1-score": 0.9238095238095239,
+          "support": 108.0
+        },
+        "Yes": {
+          "precision": 0.9444444444444444,
+          "recall": 0.9739583333333334,
+          "f1-score": 0.958974358974359,
+          "support": 192.0
+        },
+        "accuracy": 0.9466666666666667,
+        "macro avg": {
+          "precision": 0.9477124183006536,
+          "recall": 0.9360532407407407,
+          "f1-score": 0.9413919413919414,
+          "support": 300.0
+        },
+        "weighted avg": {
+          "precision": 0.9467973856209149,
+          "recall": 0.9466666666666667,
+          "f1-score": 0.9463150183150183,
+          "support": 300.0
+        }
+      },
+      "confusion_matrix_labels": [
+        "No",
+        "Yes"
+      ],
+      "confusion_matrix": [
+        [
+          97,
+          11
+        ],
+        [
+          5,
+          187
+        ]
+      ],
+      "water_mae_mm": 2.9334492020884357,
+      "water_rmse_mm": 3.6082855841643817,
+      "water_r2": 0.9800834380681038,
+      "water_within_5mm_pct": 82.33333333333334,
+      "water_within_10mm_pct": 99.66666666666667,
+      "negative_water_predictions": 11,
+      "random_forest": {
+        "classifier_accuracy_pct": 92.66666666666666,
+        "water_mae_mm": 5.444184396963682,
+        "water_rmse_mm": 6.83961403813454,
+        "water_r2": 0.9284391064702102,
+        "confusion_matrix": [
+          [
+            93,
+            15
+          ],
+          [
+            7,
+            185
+          ]
+        ]
+      }
+    }
+  },
+  "limitations": [
+    "Accuracy measures reproduction of synthetic labels, not field irrigation correctness.",
+    "No timestamp or moisture-after-30-min target; not comparable to the previous moisture model.",
+    "No chili or lettuce rows in this dataset. No evidence of transfer to the project's crops.",
+    "Solar radiation MJ/m2 cannot be substituted directly with LDR lux.",
+    "Unknown label-generation details; removing pH as an input does not establish pH-independent ground truth.",
+    "No explicit source license observed. Download and outputs kept local, not redistributed."
+  ]
+}

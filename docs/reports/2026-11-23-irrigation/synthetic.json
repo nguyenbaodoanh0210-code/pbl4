@@ -1,0 +1,115 @@
+{
+  "model": "CatBoostRegressor",
+  "data_source": "synthetic",
+  "automatic_control_approved": false,
+  "target": "soil_moisture_30m_pct",
+  "horizon_minutes": 30,
+  "features": [
+    "crop_type",
+    "growth_stage",
+    "substrate",
+    "area_sqm",
+    "soil_moisture_pct",
+    "temperature_c",
+    "air_humidity_pct",
+    "light_lux",
+    "irrigation_liters"
+  ],
+  "categorical_features": [
+    "crop_type",
+    "growth_stage",
+    "substrate"
+  ],
+  "best_iteration": 357,
+  "split": "chronological 70/15/15; overlapping target timestamps purged",
+  "split_rows": {
+    "train": 840,
+    "validation": 180,
+    "test": 180
+  },
+  "purged_rows": 0,
+  "test_metrics": {
+    "mae_percentage_points": 0.7283646869850445,
+    "rmse_percentage_points": 0.8905191122172335,
+    "r2": 0.9967537734316414
+  },
+  "persistence_baseline": {
+    "mae_percentage_points": 1.8253,
+    "rmse_percentage_points": 2.2990240489776914,
+    "r2": 0.9783638807230797
+  },
+  "random_forest_test_metrics": {
+    "mae_percentage_points": 0.9552631706158804,
+    "rmse_percentage_points": 1.204823815911015,
+    "r2": 0.9940579072569992
+  },
+  "comparison_protocol": "Same time split, inputs, targets; encoders fitted on training only. CatBoost uses validation early stopping; RF fixed a priori.",
+  "random_forest_per_crop_test_mae": {
+    "chili": 0.8899097493666794,
+    "lettuce": 1.0206165918650814
+  },
+  "beats_persistence_mae": true,
+  "per_crop_test_mae": {
+    "chili": 0.7452292246161758,
+    "lettuce": 0.7115001493539135
+  },
+  "training_categories": {
+    "crop_type": [
+      "chili",
+      "lettuce"
+    ],
+    "growth_stage": [
+      "flowering",
+      "vegetative"
+    ],
+    "substrate": [
+      "coco",
+      "soil"
+    ]
+  },
+  "training_numeric_ranges": {
+    "area_sqm": [
+      1.0,
+      1.0
+    ],
+    "soil_moisture_pct": [
+      25.05,
+      74.97
+    ],
+    "temperature_c": [
+      20.012,
+      34.996
+    ],
+    "air_humidity_pct": [
+      45.026,
+      89.96
+    ],
+    "light_lux": [
+      20.75,
+      39929.14
+    ],
+    "irrigation_liters": [
+      0.0,
+      0.3
+    ]
+  },
+  "feature_importance": {
+    "crop_type": 0.3080325041952499,
+    "growth_stage": 0.21843617371049157,
+    "substrate": 0.27165084622927277,
+    "area_sqm": 0.0,
+    "soil_moisture_pct": 92.97361708247035,
+    "temperature_c": 1.0710746249940437,
+    "air_humidity_pct": 0.6910656064413722,
+    "light_lux": 0.804219178477913,
+    "irrigation_liters": 3.6619039834812783
+  },
+  "model_sha256": "5112ced248659312843fa68c69ab40fb3e3951f57055a9f7b012cb8e59f96c79",
+  "dataset_sha256": "74cd9ee81724a929c80e3317bd5eaba3e49f94a2ee0afe87b0a29622fcf65120",
+  "limitations": [
+    "Synthetic results are software checks, not field accuracy.",
+    "Observed associations do not establish optimal irrigation or causal effects.",
+    "No held-out-garden validation yet. Do not enable automatic pump control.",
+    "Same calibrated sensors, units and physical zone setup required for comparisons."
+  ]
+}

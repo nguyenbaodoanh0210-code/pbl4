@@ -7,6 +7,7 @@
 export const OUTDOOR_METRICS = [
   ['temperature', 'Nhiệt độ không khí', '°C', 'temperature', 'Cảm biến nhiệt độ'],
   ['humidity', 'Độ ẩm không khí', '%', 'humidity', 'Cảm biến độ ẩm'],
+  ['soil_moisture', 'Độ ẩm đất', '%', 'humidity', 'Cảm biến đất đã hiệu chuẩn'],
   ['light_level', 'Cường độ ánh sáng', 'Lux', 'light_level', 'Cảm biến ánh sáng'],
 ];
 
@@ -55,6 +56,7 @@ export const state = {
   greenhouseSaving: false,
   deviceSaving: false,
   pumpBusy: false,
+  pumpAreaId: '',
   pumpMessage: '',
   pumpError: '',
   greenhouseNotice: '',
@@ -184,8 +186,8 @@ export function areaForDevice(device) {
 export function currentPumpData(gardenId = currentGarden()?.greenhouse_id) {
   if (!gardenId) return { pump: null, logs: [] };
   const payload = state.actuators[gardenId];
-  const pump = payload?.actuators?.find((a) => a.actuator_type === 'PUMP') || null;
-  return { pump, logs: payload?.recent_logs || [] };
+  const pump = payload?.actuators?.find((a) => a.actuator_type === 'PUMP' && (a.area_id || '') === state.pumpAreaId) || null;
+  return { pump, logs: (payload?.recent_logs || []).filter(l => l.actuator_id === pump?.actuator_id) };
 }
 
 export function getPeriodLogs(device = activeSensorDevice()) {
@@ -206,6 +208,9 @@ export function evaluateMetricStatus(metricKey, value, thresholds) {
   }
   const num = Number(value);
   const t = thresholds || {};
+  if (metricKey === 'soil_moisture') {
+    return { level: 'neutral', label: 'Ngưỡng tưới theo cấu hình từng khu' };
+  }
   if (metricKey === 'temperature') {
     const minT = t.min_temp ?? 20;
     const maxT = t.max_temp ?? 33;

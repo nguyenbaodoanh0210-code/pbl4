@@ -110,18 +110,14 @@ void checkWeatherAlerts(float temp, float hum, int soilPercent) {
 }
 
 /**
- * Gửi dữ liệu định dạng JSON để Python đọc và đưa vào mô hình AI
+ * Gửi các số đo môi trường thực tế ở định dạng JSON cho Python đọc.
  */
 void sendDataToPython(float temp, float hum, int soilPercent) {
-  // Chuỗi JSON chứa đúng 9 biến mà mô hình AI yêu cầu
-  // Giá trị N, P, K, pH, Crop_Type, Growth_Stage có thể điều chỉnh giá trị mặc định tùy dự án
-    // Giá trị loại cây/giai đoạn phải trùng chính tả với category trong dataset.
-    // Đây là giá trị demo cố định; thay bằng cấu hình thực của luống trước khi dùng.
-    Serial.print("JSON_DATA:{\"Crop_Type\":\"Xa_Lach\",\"Growth_Stage\":\"2_Phat_Trien_Than_La\",\"Temperature\":");
+  Serial.print("JSON_DATA:{\"Temperature\":");
   Serial.print(temp, 1);
   Serial.print(",\"Humidity\":");
   Serial.print(hum, 1);
   Serial.print(",\"Soil_Moisture\":");
   Serial.print(soilPercent);
-  Serial.print(",\"Soil_pH\":6.5,\"Nitrogen\":40,\"Phosphorus\":20,\"Potassium\":30}\n");
+  Serial.print("}\n");
 }

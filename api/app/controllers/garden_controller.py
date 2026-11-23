@@ -70,11 +70,12 @@ def list_crops(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return (
+    from ..services.public_fields import crop_fields
+    return [crop_fields(row) for row in (
         db.query(Crop)
         .order_by(Crop.crop_name.asc(), Crop.crop_stage_id.asc())
         .all()
-    )
+    )]
 
 
 @router.get("/greenhouses")

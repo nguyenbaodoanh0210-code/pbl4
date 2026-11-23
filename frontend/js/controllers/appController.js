@@ -12,6 +12,7 @@ import {
   loadWorkspaceData,
   patchCameraLogStatus,
   refreshGardenAreas,
+  refreshGardenActuators,
   triggerCapture,
   updateGardenArea,
   updatePumpControl,
@@ -238,7 +239,7 @@ async function handlePumpAction({ mode, toggle }) {
   state.pumpMessage = '';
   render();
 
-  const payload = {};
+  const payload = { area_id: state.pumpAreaId || null };
   if (mode) payload.control_mode = mode;
   if (toggle === 'on' || toggle === 'off') {
     payload.control_mode = 'MANUAL';
@@ -250,8 +251,8 @@ async function handlePumpAction({ mode, toggle }) {
     const mqttOk = result?.mqtt?.published;
     if (toggle) {
       state.pumpMessage =
-        (toggle === 'on' ? 'Đã bật Bơm nước.' : 'Đã tắt Bơm nước.') +
-        (mqttOk ? ' Đã gửi lệnh MQTT tới phần cứng.' : ' Đã lưu trạng thái (chờ đồng bộ MQTT).');
+        mqttOk ? 'Đã gửi lệnh; chờ board xác nhận trạng thái relay.' :
+          'Chưa gửi được lệnh tới board. Kiểm tra kết nối; không coi bơm đã đổi trạng thái.';
     } else {
       state.pumpMessage =
         mode === 'AUTO'
@@ -271,6 +272,37 @@ async function handlePumpAction({ mode, toggle }) {
 }
 
 // ─── Camera / Diagnosis handlers ─────────────────────────────────────────────
+
+async function handleIrrigationConfig(event) {
+  const form = event.target.closest('#irrigation-config');
+  if (!form) return;
+  event.preventDefault();
+  if (state.pumpBusy) return;
+  const garden = currentGarden();
+  const fields = Object.fromEntries(new FormData(form));
+  const rules = { schema_version: 2, sensor_device_id: fields.sensor_device_id,
+    hardware_verified: form.elements.hardware_verified.checked,
+    rain_exposed: form.elements.rain_exposed.checked,
+    allowed_start: fields.allowed_start || null, allowed_end: fields.allowed_end || null };
+  for (const key of ['start_below_pct', 'stop_at_pct', 'base_run_seconds', 'max_run_seconds',
+    'cooldown_seconds', 'max_daily_seconds', 'latitude', 'longitude', 'max_temperature_c',
+    'max_light_lux', 'hot_day_c', 'morning_multiplier', 'rainy_evening_multiplier']) {
+    rules[key] = fields[key] === '' ? null : Number(fields[key]);
+  }
+  state.pumpBusy = true;
+  state.pumpError = '';
+  try {
+    await updatePumpControl(garden.greenhouse_id, { area_id: state.pumpAreaId || null,
+      device_id: fields.device_id, auto_rules: rules,
+      control_mode: form.elements.enabled.checked ? 'AUTO' : 'MANUAL' });
+    state.pumpMessage = 'Đã lưu cấu hình. Tưới tự động cần tiến trình nhận cảm biến và số đo hợp lệ.';
+  } catch (err) {
+    state.pumpError = err.message;
+  } finally {
+    state.pumpBusy = false;
+    render();
+  }
+}
 
 async function loadCameraHistory() {
   if (!state.user) return;
@@ -768,6 +800,15 @@ function bindEvents() {
   appEl.addEventListener('submit', handleGreenhouseSubmit);
   appEl.addEventListener('submit', handleDeviceSubmit);
   appEl.addEventListener('submit', handleAreaSubmit);
+  appEl.addEventListener('submit', handleIrrigationConfig);
+  appEl.addEventListener('change', event => {
+    if (event.target.id === 'pump-area') {
+      state.pumpAreaId = event.target.value;
+      state.pumpError = '';
+      state.pumpMessage = '';
+      render();
+    }
+  });
 
   // Camera / Diagnosis form
   appEl.addEventListener('submit', handleDiagnoseSubmit);
@@ -1074,6 +1115,21 @@ export async function startApp() {
   profilePanelEl = document.querySelector('#profile-panel');
 
   bindEvents();
+  // Refresh acknowledgements without erasing a configuration form being edited.
+  let refreshingPump = false;
+  setInterval(async () => {
+    if (!state.user || state.page !== 'home' || state.pumpBusy || refreshingPump ||
+        document.querySelector('.irrigation-panel details[open]')) return;
+    const garden = currentGarden();
+    if (!garden) return;
+    refreshingPump = true;
+    try {
+      await refreshGardenActuators(garden.greenhouse_id);
+      if (state.page === 'home' && !document.querySelector('.irrigation-panel details[open]')) render();
+    } catch {
+      // Preserve the last snapshot; its device timestamp remains visible.
+    } finally { refreshingPump = false; }
+  }, 10000);
 
   const route = readRoute();
   if (!state.token) {

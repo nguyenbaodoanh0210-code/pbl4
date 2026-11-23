@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.auth import get_current_user
 from ..core.database import get_db
@@ -14,6 +15,20 @@ from ..services import (
 )
 
 router = APIRouter(prefix="/api/greenhouses", tags=["actuators"])
+
+
+class PumpFeedback(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    device_id: str = Field(min_length=1, max_length=50)
+    command_id: str = Field(min_length=1, max_length=50)
+    is_on: bool
+    device_token: str = Field(min_length=1, max_length=300)
+
+
+@router.post("/pump-feedback")
+def pump_feedback(body: PumpFeedback, db: Session = Depends(get_db)):
+    from ..services.actuator_feedback import record_feedback
+    return record_feedback(db, body.device_id, body.command_id, body.is_on, body.device_token)
 
 
 @router.get("/{greenhouse_id}/actuators")

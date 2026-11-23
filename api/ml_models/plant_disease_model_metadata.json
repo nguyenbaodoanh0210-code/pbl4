@@ -1,0 +1,11 @@
+{
+  "model_name": "MobileNetV2 · Plant Disease",
+  "class_names": ["Bacterial", "fungal", "healthy", "ot_dom_vi_khuan", "ot_khoe_manh"],
+  "class_groups": {"Bacterial": "bacterial", "fungal": "fungal", "healthy": "healthy", "ot_dom_vi_khuan": "bacterial", "ot_khoe_manh": "healthy"},
+  "image_size": 224,
+  "preprocessing": "pil_rgb_bicubic_0_255",
+  "model_sha256": "89ab77ab8012bd8646d8f9748c6362e75a29ac1c150d5270ac951c1ea611be88",
+  "source": "HE THONG GIAM SAT CAY TRONG.zip/ai-service, supplied by project owner",
+  "evaluation": null,
+  "notes": "Thứ tự nhãn và xử lý ảnh lấy từ ai-service/main.py, đối chiếu class_names.json. Rescaling nằm trong model. Chưa có tập kiểm định hay báo cáo độ chính xác đi kèm."
+}

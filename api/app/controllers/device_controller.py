@@ -10,6 +10,7 @@ from ..core.auth import get_current_user
 from ..core.database import get_db
 from ..models import Device, SensorLog, User
 from ..schemas import DeviceInput, DeviceStatusInput
+from ..services.public_fields import sensor_fields
 from ..services import (
     accessible_devices,
     require_area_access,
@@ -163,7 +164,7 @@ def get_sensor_by_device(
         raise HTTPException(
             status_code=404, detail="Không tìm thấy dữ liệu cho thiết bị này"
         )
-    return logs
+    return [sensor_fields(row) for row in logs]
 
 
 @router.get("/sensors/{device_id}/latest")
@@ -183,4 +184,4 @@ def get_latest_sensor(
         raise HTTPException(
             status_code=404, detail="Không tìm thấy dữ liệu cho thiết bị này"
         )
-    return log
+    return sensor_fields(log)

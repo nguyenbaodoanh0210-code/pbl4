@@ -55,7 +55,7 @@ def publish_mqtt_json(topic: str, payload: dict) -> dict:
         info.wait_for_publish(timeout=cfg["timeout"])
         client.loop_stop()
         client.disconnect()
-        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+        if info.rc != mqtt.MQTT_ERR_SUCCESS or not info.is_published():
             return {"published": False, "topic": topic, "error": f"MQTT rc={info.rc}"}
         return {"published": True, "topic": topic, "error": None}
     except Exception as exc:

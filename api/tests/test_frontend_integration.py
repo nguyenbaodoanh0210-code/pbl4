@@ -7,6 +7,7 @@ and end-to-end data flow between the frontend views and backend controllers.
 import glob
 import os
 import unittest
+from tests import support  # Configure isolated DB and disabled MQTT before app imports.
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -191,8 +192,8 @@ class TestFrontendE2EWorkflow(unittest.TestCase):
             headers=self.headers,
             json={"control_mode": "AUTO"},
         )
-        self.assertEqual(put_auto.status_code, 200)
-        self.assertEqual(put_auto.json()["actuator"]["control_mode"], "AUTO")
+        # AUTO without sensor binding/calibrated hardware must fail closed.
+        self.assertEqual(put_auto.status_code, 422)
 
         put_manual = self.client.put(
             f"/api/greenhouses/{gh_id}/actuators/PUMP",

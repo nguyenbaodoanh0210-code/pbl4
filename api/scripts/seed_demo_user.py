@@ -96,18 +96,14 @@ def demo_rows(user: dict, prefix: str, anchor: datetime) -> dict[str, list[dict]
                     "temperature": round(26 + 3.5 * wave + number * 0.2, 2),
                     "humidity": round(65 - 9 * wave, 2),
                     "soil_moisture": round(58 + 6 * math.sin(sample / 15 + number), 2),
-                    "soil_ph": round(6.2 + 0.25 * math.sin(sample / 20), 2),
-                    "n": round(105 + 12 * wave, 2),
-                    "p": round(52 + 6 * math.cos(sample / 18), 2),
-                    "k": round(135 + 15 * math.sin(sample / 22), 2),
                 }
                 if sample >= 330:
                     if number == 2:
                         readings["soil_moisture"] = 88.0
                     elif number == 3:
-                        readings["soil_ph"] = 4.8
+                        readings["soil_moisture"] = 25.0
                     elif number == 4:
-                        readings["n"] = 42.0
+                        readings["humidity"] = 40.0
                     elif number == 5:
                         readings["temperature"] = 35.5
                 rows["sensor_logs"].append({
@@ -131,7 +127,7 @@ def demo_rows(user: dict, prefix: str, anchor: datetime) -> dict[str, list[dict]
 
             scenario = (
                 "Số đo môi trường mô phỏng ổn định", "Độ ẩm đất mô phỏng cao",
-                "pH mô phỏng thấp", "Chỉ số Nitơ mô phỏng thấp",
+                "Độ ẩm đất mô phỏng thấp", "Độ ẩm không khí mô phỏng thấp",
                 "Nhiệt độ mô phỏng cao", "Thiết bị mô phỏng mất kết nối",
             )[number - 1]
             for event in range(6):

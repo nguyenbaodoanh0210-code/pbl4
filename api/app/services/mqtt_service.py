@@ -14,6 +14,7 @@ from ..models import Device, Greenhouse, GreenhouseArea, Notification, SensorLog
 from .access_service import resolve_effective_thresholds
 from .actuator_service import evaluate_auto_actuators
 from .mqtt_publisher import camera_cmd_topic, create_mqtt_client, publish_mqtt_json
+from .sensor_validation import timestamp_problem, quality_problems, utc
 
 
 logger = logging.getLogger(__name__)
@@ -191,24 +192,27 @@ def process_sensor_payload(payload: dict, db: Session, verify_token: bool = True
     device = (
         db.query(Device)
         .filter(Device.device_id == device_id, Device.deleted_at.is_(None))
+        .with_for_update()
         .first()
     )
     if device is None or device.status != "ACTIVE":
         raise ValueError("Thiết bị không tồn tại hoặc không hoạt động")
+    if device.device_type != "SENSOR_NODE":
+        raise ValueError("Chỉ SENSOR_NODE được gửi số đo")
 
     measured_at = _parse_timestamp(data.get("timestamp"))
+    problem = timestamp_problem(measured_at)
+    if problem:
+        raise ValueError(problem)
     temperature = _number(data, "temperature", ("temp", "Temperature"), -40, 85, required=True)
     humidity = _number(data, "humidity", ("hum", "Humidity"), 0, 100, required=True)
     light_level = _number(
-        data, "light_level", ("light", "lux", "ldr", "Light_Level"), 0, 200000, required=False
+        data, "light_level", ("light", "lux", "Light_Level"), 0, 200000, required=True
     )
     soil_moisture = _number(
-        data, "soil_moisture", ("moisture", "Soil_Moisture"), 0, 100, required=False
+        data, "soil_moisture", ("moisture", "Soil_Moisture"), 0, 100, required=True
     )
-    soil_ph = _number(data, "pH", ("soil_pH", "soil_ph", "Soil_pH"), 0, 14, required=False)
-    nitrogen = _number(data, "nitrogen", ("N", "Nitrogen"), 0, 5000, required=False)
-    phosphorus = _number(data, "phosphorus", ("P", "Phosphorus"), 0, 5000, required=False)
-    potassium = _number(data, "potassium", ("K", "Potassium"), 0, 5000, required=False)
+    # Removed sensors: ignore old pH/N/P/K payload fields; retain historical DB columns.
 
     duplicate = (
         db.query(SensorLog)
@@ -218,6 +222,10 @@ def process_sensor_payload(payload: dict, db: Session, verify_token: bool = True
     if duplicate:
         return {"status": "duplicate", "log_id": duplicate.log_id}
 
+    history = db.query(SensorLog).filter(SensorLog.device_id == device_id).order_by(SensorLog.timestamp.desc()).limit(120).all()
+    if history and measured_at <= utc(history[0].timestamp):
+        raise ValueError("Bản tin đến sai thứ tự; thời gian đo phải mới hơn bản đã nhận")
+
     new_log = SensorLog(
         log_id=str(uuid.uuid4()),
         device_id=device_id,
@@ -226,15 +234,12 @@ def process_sensor_payload(payload: dict, db: Session, verify_token: bool = True
         humidity=humidity,
         light_level=light_level,
         soil_moisture=soil_moisture,
-        soil_pH=soil_ph,
-        N=nitrogen,
-        P=phosphorus,
-        K=potassium,
     )
     db.add(new_log)
     device.is_online = True
     device.last_updated = measured_at
     db.flush()
+    quality_flags = quality_problems(new_log, history)
 
     greenhouse = (
         db.query(Greenhouse)
@@ -262,18 +267,27 @@ def process_sensor_payload(payload: dict, db: Session, verify_token: bool = True
         "log_id": new_log.log_id,
         "actuator_changes": actuator_changes,
         "alert": alert_info,
+        "quality_flags": quality_flags,
     }
 
 
 def on_connect(client, userdata, flags, rc):
     print(f"Đã kết nối MQTT Broker với mã: {rc}")
     client.subscribe(MQTT_TOPIC)
+    client.subscribe("smart_garden/+/pump/feedback")
 
 
 def on_message(client, userdata, msg):
     db = SessionLocal()
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
+        if msg.topic.endswith("/pump/feedback"):
+            from .actuator_feedback import record_feedback
+            if not isinstance(payload.get("is_on"), bool):
+                raise ValueError("is_on phải là boolean")
+            record_feedback(db, payload.get("device_id"), payload.get("command_id"),
+                            payload["is_on"], payload.get("device_token", ""))
+            return
         result = process_sensor_payload(payload, db, verify_token=True)
         print(f"Xử lý bản tin MQTT ({payload.get('device_id')}): {result['status']}")
     except (ValueError, PermissionError, json.JSONDecodeError) as err:

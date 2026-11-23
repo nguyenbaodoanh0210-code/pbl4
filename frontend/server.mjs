@@ -10,7 +10,16 @@ const contentTypes = { '.html':'text/html; charset=utf-8', '.css':'text/css; cha
 
 async function bodyOf(request) {
   const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > 10 * 1024 * 1024) {
+      const error = new Error('Dữ liệu gửi lên vượt quá 10 MB');
+      error.status = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   return Buffer.concat(chunks);
 }
 
@@ -21,13 +30,14 @@ const server = createServer(async (req, res) => {
       const headers = { Accept: req.headers.accept || 'application/json' };
       if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
       if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+      if (req.headers['x-device-token']) headers['X-Device-Token'] = req.headers['x-device-token'];
       const body = ['GET', 'HEAD'].includes(req.method || 'GET') ? undefined : await bodyOf(req);
       const upstream = await fetch(apiOrigin + url.pathname + url.search, { method: req.method, headers, body });
       res.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json', 'Cache-Control':'no-store' });
       if (upstream.body) for await (const chunk of upstream.body) res.write(chunk);
       res.end();
     } catch (error) {
-      res.writeHead(502, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store' });
+      res.writeHead(error.status || 502, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store' });
       res.end(JSON.stringify({ detail:'Không kết nối được API tại ' + apiOrigin + ': ' + error.message }));
     }
     return;

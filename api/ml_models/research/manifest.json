@@ -1,0 +1,29 @@
+{
+  "automatic_control_approved": false,
+  "purpose": "Reproducible research only; API never loads these weights",
+  "versions": {
+    "catboost": "1.2.10",
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.4",
+    "pandas": "3.0.6",
+    "joblib": "1.6.0"
+  },
+  "files": {
+    "api/ml_models/research/synthetic/catboost.cbm": {
+      "sha256": "5112ced248659312843fa68c69ab40fb3e3951f57055a9f7b012cb8e59f96c79",
+      "bytes": 434816
+    },
+    "api/ml_models/research/synthetic/random_forest.joblib": {
+      "sha256": "427f9b4c851ac624780c33a05d1bf40f98a72b311f60e3c320c4cb2e8c9c24f1",
+      "bytes": 4182381
+    },
+    "api/ml_models/research/lettuce/catboost.cbm": {
+      "sha256": "e5bdf04e80f4922f72c5801f5cf965ce2c363994bea023be3cecc124f9106759",
+      "bytes": 147256
+    },
+    "api/ml_models/research/lettuce/random_forest.joblib": {
+      "sha256": "4939e3367f631008caa5f853afffa4a2c5753cf146052d478a7f0a26532bbe37",
+      "bytes": 555142
+    }
+  }
+}

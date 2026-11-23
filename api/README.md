@@ -8,9 +8,7 @@ FastAPI backend for greenhouse telemetry and experimental plant recommendations.
 api/
 ├── app/                 FastAPI app, database models, and AI inference
 ├── data/                Source datasets used for training
-├── firmware/esp32/      ESP32 source currently present in the repository
-├── models/              Active model artifacts and evaluation reports
-│   └── legacy/           Unverified pickle files retained but never loaded
+├── ml_models/           Image models and isolated irrigation research artifacts
 ├── scripts/             Model training, simulation, and serial utilities
 ├── main.py              Compatibility entry point for Uvicorn
 ├── requirements.txt
@@ -126,7 +124,7 @@ Invoke-RestMethod 'http://127.0.0.1:5173/health?check_database=true'
 - Devices: `GET /api/devices`, `POST /api/devices`, and `PATCH /api/devices/{device_id}/status` require login and are scoped to the user's greenhouses; `ADMIN` can manage all.
 - Sensors: `GET /api/sensors/{device_id}/latest` and `GET /api/sensors/{device_id}?start=...&end=...&limit=...&offset=...` require access to the device's greenhouse. Timestamps must include a timezone; page size is capped at 500.
 - Recommendations: `GET /api/recommendations` with `device_id`, `status`, `limit`, and `offset` filters; `GET /api/recommendations/{rec_id}`; `PUT /api/recommendations/{rec_id}/apply` require login and only return/update recommendations linked to the user's greenhouse. `ADMIN` can access all records.
-- Fertilizer model: `POST /api/ai/fertilizer/predict`. Send the nine model features: `Crop_Type`, `Growth_Stage`, `Temperature`, `Humidity`, `Soil_Moisture`, `Soil_pH`, `Nitrogen`, `Phosphorus`, `Potassium`. Unknown categories and numeric values outside the training range are rejected. The endpoint returns an experimental prediction and does not persist it.
+- The fertilizer models and training/loader code have been removed. The retired `POST /api/ai/fertilizer/predict` endpoint returns HTTP 410.
 - Image model: `POST /api/ai/disease/predict`. Send raw JPEG or PNG bytes with the matching `Content-Type`; maximum body size is 10 MB and maximum image size is 20 megapixels. The image is not stored. Scores are softmax outputs, not calibrated confidence values. The API returns HTTP 503 if the model or TensorFlow runtime is unavailable.
 
 Register/login requests use JSON with `full_name`, `email`, and `password` (plus optional `phone_number` on registration). Use the returned `access_token` as a bearer token:
@@ -135,22 +133,6 @@ Register/login requests use JSON with `full_name`, `email`, and `password` (plus
 $body = @{ full_name = "Nông dân"; email = "farmer@example.com"; password = "a-long-demo-password-123" } | ConvertTo-Json
 $session = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/auth/register -ContentType application/json -Body $body
 Invoke-RestMethod -Uri http://127.0.0.1:8000/api/greenhouses -Headers @{ Authorization = "Bearer $($session.access_token)" }
-```
-
-Example fertilizer request:
-
-```json
-{
-  "Crop_Type": "Xa_Lach",
-  "Growth_Stage": "2_Phat_Trien_Than_La",
-  "Temperature": 25,
-  "Humidity": 65,
-  "Soil_Moisture": 60,
-  "Soil_pH": 6.5,
-  "Nitrogen": 100,
-  "Phosphorus": 50,
-  "Potassium": 120
-}
 ```
 
 Example image request:
@@ -166,22 +148,16 @@ The MQTT subscriber validates the device token, device registration, timestamp, 
 From the `api` directory, run:
 
 ```powershell
-.\venv\Scripts\python.exe -m app.mqtt_client
+.\venv\Scripts\python.exe -m app.irrigation_worker
 .\venv\Scripts\python.exe -m scripts.simulate_esp32
 .\venv\Scripts\python.exe -m scripts.serial_ai
 ```
 
-The simulator sends random demo readings and requires a registered device and configured token. The firmware file is in `firmware/esp32`; its current source expects an Arduino `config.h` and DHT library that are not included here.
+Run exactly one irrigation worker: it receives telemetry/feedback and checks pump deadlines independently of new sensor packets. The simulator sends random demo readings; use it only with isolated demo devices and automatic control disabled. The bounded pump firmware is in `../hardware/nodemcu_v2`; copy `config.example.h` to ignored `config.h`, implement calibrated sensor adapters, and verify relay shutdown before enabling hardware control. The ESP32-S3 camera source in `../hardware/reference` is a separate reference, not a drop-in pump controller.
 
 ## Train models
 
-The greenhouse workbook is in `data/greenhouse/Greenhouse_Demo_Dataset.xlsx`. Train the sensor model using installed project dependencies:
-
-```powershell
-.\venv\Scripts\python.exe -m scripts.train_greenhouse_model
-```
-
-The trained artifact and evaluation report are saved under `models/`. The model is trained from demo data and does not produce validated agronomic prescriptions.
+Image inference uses `ml_models/plant_disease_model.keras`. CatBoost and Random Forest irrigation experiments are separate from live control; `ml_models/research` contains reproducible research weights and the API never loads them. See [the comparison report](../docs/reports/2026-11-23-irrigation/REPORT.md). The old fertilizer workbook is historical data and is not used by the API.
 
 The chili image dataset is under `data/chili_plant_disease/{train,val,test}` with five balanced classes. TensorFlow is an optional CPU training dependency in `requirements-vision.txt`; install it into the existing project venv only when needed:
 
@@ -190,13 +166,124 @@ The chili image dataset is under `data/chili_plant_disease/{train,val,test}` wit
 .\venv\Scripts\python.exe -m scripts.train_disease_model --epochs 40
 ```
 
-The image CNN trains from scratch without downloading pretrained weights. The model and per-class test report are saved under `models/`. The test split contains ten images per class, so metrics are experimental and should be checked against independent field images. Existing `.pkl` artifacts in `models/legacy/` have not been verified and are never loaded by the application.
+The image CNN trains from scratch without downloading pretrained weights. The model and per-class test report are saved under `ml_models/`. The test split contains ten images per class, so metrics are experimental and should be checked against independent field images. The retired fertilizer `.pkl` and `.joblib` artifacts have been removed.
 
 ## Current limitations
 
 - Existing greenhouse records with a NULL `user_id` are intentionally hidden from farmer accounts until an administrator assigns ownership; `ADMIN` can still review them.
 - The frontend login/register forms use the account routes and send bearer tokens through the frontend proxy. Login and account data require a configured PostgreSQL connection and the authentication migration.
-- The fertilizer and disease models are experimental; neither output is validated field advice.
-- MQTT continues to use configured demo N-P-K reference thresholds and does not run the fertilizer model.
-- Firmware currently sends demo crop/stage and fixed pH/N-P-K values over Serial; these are not live measurements.
-- Camera storage and FCM notifications are not implemented. The SQL migrations are manual and are never run automatically by the API.
+- Disease predictions are experimental and are not validated field advice.
+- Fertilizer models have been removed; MQTT ignores legacy pH/N-P-K fields and Serial firmware sends environmental measurements only.
+- Camera uploads use local API storage; multi-instance shared image storage and FCM delivery are not implemented. SQL migrations are manual and never run automatically by the API.
+
+## Học train AI hỗ trợ tưới — CatBoost và Random Forest
+
+### 1. Hiểu bài toán trước khi chạy
+
+CatBoost là thư viện thuật toán. Sau khi học từ dữ liệu, nó tạo ra file trọng số `.cbm` riêng của dự án. Bài đầu tiên ở đây dự báo **độ ẩm đất sau 30 phút**, không dự báo trực tiếp số giây bật bơm. Không dùng pH/N/P/K, không gọi database, không gửi lệnh tới phần cứng.
+
+- **Feature/đầu vào:** những thông tin biết lúc quyết định tưới.
+- **Target/nhãn:** độ ẩm đất thực sự đo sau 30 phút; đây là đáp án cho model học.
+- **Train:** dữ liệu cho model học. **Validation:** chọn thời điểm dừng học. **Test:** dữ liệu giữ lại đến cuối để chấm điểm.
+
+### 2. Cài đặt trên máy khác
+
+Mở Terminal PowerShell trong VS Code. Các lệnh sau dùng đúng môi trường của API, không cần chạy Activate.ps1:
+
+```powershell
+Set-Location D:\PBL4\api
+.\venv\Scripts\python.exe -m pip install --no-cache-dir -r requirements-irrigation.txt
+.\venv\Scripts\python.exe -c "import catboost; print(catboost.__version__)"
+```
+
+Máy cần có `api/venv` trước. CatBoost chạy bằng CPU trong bài này, không cần card NVIDIA. Không tải lại TensorFlow hay clone toàn bộ mã nguồn CatBoost.
+
+### 3. Chạy bài thực hành bằng dữ liệu giả
+
+```powershell
+Set-Location D:\PBL4\api
+.\venv\Scripts\python.exe -m scripts.train_irrigation_model --demo
+```
+
+Script tạo 1.200 dòng mô phỏng cho bốn khu, train tối đa 400 vòng, dùng hai luồng CPU. Số vòng học có thể dừng sớm khi validation không cải thiện. Mỗi lần chạy tạo thư mục mới ở `ml_models/irrigation/demo/<thời-gian>/`, không ghi đè model ảnh.
+
+Kết quả gồm `irrigation_model.cbm`, `random_forest.joblib`, `report.json`, `test_predictions.csv` và `synthetic_training_data.csv`. Hai model dùng cùng đầu vào và phân chia dữ liệu; bộ mã hóa Random Forest chỉ học từ tập train. Dữ liệu mô phỏng được sinh từ một công thức giả định, nên điểm số chỉ chứng minh chương trình chạy được, không chứng minh khả năng tưới cây. Không đổi `synthetic` thành `measured` để đưa dữ liệu giả vào bài train thật.
+
+### 4. Chuẩn bị dữ liệu thật
+
+Sao chép `data/irrigation/template.csv` thành `data/irrigation/observations.csv`. Mẫu chỉ có tiêu đề để không vô tình trộn ví dụ vào dữ liệu thật. Có thể nhập bằng Excel rồi lưu CSV UTF-8, dấu phẩy phân cách và dấu chấm thập phân. Mỗi dòng là **một khu tại một thời điểm quan sát**, không phải một cây riêng lẻ nếu cảm biến đại diện cho cả khu.
+
+| Cột | Cần ghi gì? |
+| --- | --- |
+| `timestamp` | Thời điểm lấy số đo đầu vào, có múi giờ, ví dụ `2026-11-22T08:00:00+07:00` |
+| `target_timestamp` | Thời điểm thực sự đo lại, khoảng 30 phút sau (cho phép lệch tối đa 3 phút) |
+| `zone_id` | Mã khu cố định; dùng truy vết, không làm đầu vào model |
+| `crop_type` | Loại cây, ví dụ `chili`, `lettuce`; dùng cách viết thống nhất |
+| `growth_stage` | Giai đoạn sinh trưởng đã xác định tại thời điểm đo |
+| `substrate` | Đất/giá thể, ví dụ `soil`, `coco` |
+| `area_sqm` | Diện tích khu thực sự nhận lượng nước này, m² |
+| `soil_moisture_pct` | Độ ẩm đất trước tưới, thang 0–100 đã hiệu chuẩn và thống nhất |
+| `temperature_c` | Nhiệt độ hiện tại, °C |
+| `air_humidity_pct` | Độ ẩm không khí hiện tại, % |
+| `light_lux` | Ánh sáng hiện tại, lux; không nhập ADC thô rồi gọi là lux |
+| `irrigation_liters` | Lượng nước đã quyết định cấp ngay sau số đo ban đầu, lít; không tưới thì 0 |
+| `soil_moisture_30m_pct` | Độ ẩm đất đo lại sau 30 phút; không lấy từ quy tắc hay dự đoán |
+| `data_source` | `measured` cho dữ liệu đo thực tế |
+
+Quy trình thu một dòng: ghi trạng thái trước tưới → ghi mức nước đã quyết định → tưới và xác minh lượng nước thực cấp → chờ đến thời điểm đo lại → điền nhãn. Chỉ dùng dòng mà lượng nước thực cấp khớp kế hoạch trong sai số đo đã quy định. Loại khỏi bộ train ban đầu những khoảng có tưới bổ sung, hỏng bơm, đổi cảm biến hoặc mưa không được ghi nhận. Không tính tổng nước tương lai rồi giả vờ đó là thông tin đã biết lúc quyết định.
+
+Thu cả các khoảng không tưới. Ưu tiên đo lưu lượng thực tế tại đường tưới; không suy ra lượng nước chỉ từ công suất ghi trên bơm. Không ép cây vào tình trạng quá khô hoặc tưới quá mức chỉ để tạo dữ liệu. Bài đầu nên giới hạn ở khu có điều kiện kiểm soát, cùng cách hiệu chuẩn và cấu hình vùng rễ/chậu; chưa áp dụng sang chậu, đất, cảm biến hoặc khu ngoài trời khác mà chưa kiểm định.
+
+Database hiện có log cảm biến và bật/tắt bơm chưa đủ để tự động suy ra bộ CSV này: còn phải xác minh lưu lượng/lượng nước, ghép đúng khu và cặp số đo trước–sau. Script không tự xuất database hoặc tự tạo nhãn thay cho dữ liệu thật.
+
+Script yêu cầu tối thiểu 200 dòng và 20 mốc thời gian để thực hiện chia tập. Đây chỉ là điều kiện kỹ thuật, không phải cam kết đủ dữ liệu: cần nhiều chu kỳ tưới, ngày, điều kiện và các giai đoạn cây; hàng nghìn dòng liên tiếp từ cùng một chu kỳ không tương đương nhiều quan sát độc lập.
+
+### 5. Train từ dữ liệu thật
+
+```powershell
+Set-Location D:\PBL4\api
+.\venv\Scripts\python.exe -m scripts.train_irrigation_model --csv .\data\irrigation\observations.csv
+```
+
+Kết quả nằm ở `ml_models/irrigation/experiments/<thời-gian>/`. Script dùng khoảng 70% mốc thời gian đầu để train, 15% tiếp theo validation, 15% cuối test. Những dòng có nhãn tương lai chồng qua ranh giới tập bị loại. Loại cây và giá thể được truyền trực tiếp cho CatBoost dưới dạng phân loại, không đổi tùy ý thành các số 1/2/3.
+
+### 6. Đọc kết quả và quyết định có cải thiện hay không
+
+Mở `report.json` và so sánh `test_metrics` với `persistence_baseline` — dự đoán đơn giản rằng độ ẩm sau 30 phút bằng độ ẩm hiện tại.
+
+- `mae_percentage_points`: sai số tuyệt đối trung bình. Ví dụ MAE=3 nghĩa là lệch trung bình 3 điểm phần trăm độ ẩm; **không phải accuracy 97%**.
+- `rmse_percentage_points`: nhạy hơn với những lần dự đoán lệch nhiều.
+- `r2`: có thể âm; không phải độ chính xác phần trăm.
+- `per_crop_test_mae`: kiểm tra từng loại cây, tránh một nhóm tốt che khuất nhóm kém.
+- `beats_persistence_mae`: so sánh MAE với baseline, chưa phải giấy phép chạy bơm.
+
+Nếu CatBoost không hơn baseline, kiểm tra dữ liệu, ghép thời gian, hiệu chuẩn, số chu kỳ và thông tin đầu vào trước khi tăng số vòng. Không chỉnh model liên tục theo test; khi đã dùng test để quyết định sửa, cần thu giai đoạn test mới. Kiểm tra thêm một khu chưa dùng để train trước khi tuyên bố dùng được cho khu mới; script hiện chỉ tự động chia theo thời gian.
+
+### 7. Sau khi train
+
+Script kiểm tra file `.cbm` bằng cách nạp lại và so kết quả với model trong bộ nhớ. Tất cả báo cáo đều đặt `automatic_control_approved=false`. Không có thay đổi nào vào API điều khiển bơm. Model từ dữ liệu quan sát chưa chứng minh được tác động nhân quả hoặc lượng nước tối ưu.
+
+Bước triển khai tiếp theo là chạy dự báo song song với cách tưới hiện tại, ghi sai số thực tế. Chỉ sau kiểm định mới xây bộ chọn lượng nước và thời gian bơm, kèm giới hạn thời gian, thời gian nghỉ, kiểm tra cảm biến và dừng khi mất dữ liệu. Lưu cả file model, báo cáo và phiên bản dữ liệu để có thể đối chiếu lần train sau. Các quan sát và kết quả train đã được bỏ qua bởi Git để không tự đẩy dữ liệu lên repo.
+
+Tài liệu chính thức: [Cài CatBoost](https://catboost.ai/docs/en/installation/python-installation-method-pip-install), [train bằng fit](https://catboost.ai/docs/en/concepts/python-reference_catboostregressor_fit), [lưu model](https://catboost.ai/docs/en/concepts/python-reference_catboostregressor_save_model).
+
+### Thử bộ dữ liệu công khai SIO
+
+Đã tải bản CSV từ [SIO của Abijith-U0245](https://github.com/Abijith-U0245/SIO---Smart-Irrigation-Optimization), commit `fb421ab52d070cb9dce6c2db28d0f95fcec96105`, vào `data/irrigation/external/sio/irrigation_dataset.csv`. `source.json` cùng thư mục ghi URL, checksum và thời điểm tải. Tác giả mô tả đây là dữ liệu tự tạo mô phỏng; không phải dữ liệu đo ở vườn của nhóm.
+
+Bộ tải về có 2.000 dòng, tám cây (lúa, lúa mì, ngô, bông, mía, đậu tương, cà chua, khoai tây), bốn giai đoạn. Không có ớt hoặc xà lách. Bản gốc có cột pH; script chỉ dùng danh sách đầu vào cho phép, loại pH và không dùng N/P/K. Bản gốc được giữ nguyên để đối chiếu; mỗi lần train có file `dataset_without_ph.csv` riêng.
+
+Đây là **bài toán khác**: phân loại tưới/không tưới và dự báo độ sâu nước tưới (mm). Không có thời gian quan sát, khu vườn, lượng nước thực cấp hay độ ẩm sau 30 phút, nên không thể ghép trực tiếp vào `train_irrigation_model.py` hoặc so độ chính xác với bài đó. Chi tiết cách tác giả sinh nhãn chưa được xác minh; bỏ pH khỏi đầu vào không chứng minh nhãn gốc độc lập với pH.
+
+Chạy lại thử nghiệm tại máy đã tải dataset:
+
+```powershell
+Set-Location D:\PBL4\api
+.\venv\Scripts\python.exe -m scripts.benchmark_sio_irrigation
+```
+
+Script cố định chia ngẫu nhiên có cân bằng nhãn 1.400 dòng train / 300 validation / 300 test, seed 42; dữ liệu không có thời gian để chia theo thời gian. Hai cấu hình dùng cùng tập kiểm tra: `available_inputs` chỉ dùng loại cây, giai đoạn, độ ẩm đất, nhiệt độ và độ ẩm không khí; `with_weather_context` thêm lượng mưa 7 ngày và bức xạ mặt trời. Không dùng ID hoặc nhãn đầu ra này làm đầu vào để dự đoán nhãn đầu ra kia.
+
+Kết quả lưu trong `ml_models/irrigation/external_sio/<thời-gian>/`, gồm model CatBoost `.cbm` và Random Forest `.joblib`, báo cáo, phân chia dữ liệu và từng dự đoán. Tỷ lệ đúng quyết định tưới là accuracy phân loại; sai số lượng nước tính bằng mm, không phải phần trăm độ ẩm. Bức xạ mặt trời MJ/m² không được thay trực tiếp bằng số lux từ cảm biến ánh sáng.
+
+Đây chỉ là đánh giá trên nhãn mô phỏng, chưa kiểm định tại vườn và chưa được API tải để điều khiển bơm. Không thấy giấy phép riêng ở thư mục gốc nguồn đã kiểm tra; giữ dữ liệu tải và kết quả ở máy, không tự đẩy lên GitHub. Script và mô tả nguồn có thể lưu cùng code dự án.

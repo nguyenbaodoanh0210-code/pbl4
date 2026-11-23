@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import unittest
+from tests import support  # Configure isolated DB and disabled MQTT before app imports.
 
 from fastapi import HTTPException
 

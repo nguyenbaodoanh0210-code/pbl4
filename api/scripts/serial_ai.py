@@ -1,4 +1,4 @@
-"""Read ESP32 JSON lines over Serial and run the greenhouse demo model."""
+"""Inspect ESP32 environmental JSON lines; irrigation runs in the authenticated API."""
 
 import json
 import os
@@ -6,7 +6,6 @@ import time
 
 import serial
 
-from app.ai.greenhouse import MODEL_PATH, load_ai_model, predict_greenhouse
 
 
 BAUD_RATE = int(os.getenv("ESP32_BAUD_RATE", "115200"))
@@ -14,10 +13,6 @@ COM_PORT = os.getenv("ESP32_COM_PORT", "COM6")
 
 
 def main() -> int:
-    model_bundle = load_ai_model(MODEL_PATH)
-    if model_bundle is None:
-        return 1
-
     try:
         connection = serial.Serial(COM_PORT, BAUD_RATE, timeout=1)
         time.sleep(2)
@@ -39,12 +34,9 @@ def main() -> int:
 
             try:
                 sensor_data = json.loads(raw_line.removeprefix("JSON_DATA:").strip())
-                prediction = predict_greenhouse(sensor_data, model_bundle)
-                print(
-                    f"Diagnosis={prediction['condition_diagnosis']} "
-                    f"Action={prediction['fertilizer_action']}"
-                )
-                print("Experimental output from the demo dataset; not verified agronomy advice.")
+                allowed = ('temperature', 'humidity', 'soil_moisture', 'light_lux')
+                print({key:sensor_data.get(key) for key in allowed})
+                print('Send readings to /api/ingest/sensors/{device_id} for irrigation control.')
             except (json.JSONDecodeError, ValueError, RuntimeError) as exc:
                 print(f"Prediction skipped: {exc}")
     except KeyboardInterrupt:

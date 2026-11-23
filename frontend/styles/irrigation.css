@@ -1,0 +1,20 @@
+.irrigation-panel h4 { margin: 20px 0 8px; }
+.app-shell:not(.auth-mode) .metric-grid.metric-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media(max-width: 1000px) { .app-shell:not(.auth-mode) .metric-grid.metric-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media(max-width: 600px) { .app-shell:not(.auth-mode) .metric-grid.metric-grid-4 { grid-template-columns: 1fr; } }
+.irrigation-panel label { display: block; margin: 10px 0; }
+.irrigation-panel input:not([type=checkbox]), .irrigation-panel select { width: 100%; min-height: 38px; }
+.irrigation-panel fieldset { border: 0; padding: 0; min-width: 0; }
+.irrigation-panel details { margin-top: 18px; }
+.irrigation-panel summary { cursor: pointer; padding: 8px 0; }
+.irrigation-times { margin: 12px 0; }
+.irrigation-times div { padding: 7px 0; border-bottom: 1px solid #ddd; }
+.irrigation-times dt { font-size: 12px; color: #566459; }
+.irrigation-times dd { margin: 3px 0; }
+.irrigation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.irrigation-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 12px; }
+.irrigation-table { overflow-x: auto; }
+.irrigation-table table { width: 100%; border-collapse: collapse; }
+.irrigation-table th, .irrigation-table td { padding: 8px 6px; border-bottom: 1px solid #ddd; text-align: right; }
+.irrigation-table th:first-child, .irrigation-table td:first-child { text-align: left; }
+@media(max-width: 600px) { .irrigation-fields { grid-template-columns: 1fr; } }

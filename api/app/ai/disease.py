@@ -2,12 +2,16 @@
 
 from functools import lru_cache
 import json
+import hashlib
+import io
+import math
+import os
 from pathlib import Path
 
 
 MODEL_DIR = Path(__file__).resolve().parents[2] / "ml_models"
-MODEL_PATH = MODEL_DIR / "chili_disease_model.keras"
-METADATA_PATH = MODEL_DIR / "chili_disease_model_metadata.json"
+MODEL_PATH = Path(os.getenv("DISEASE_MODEL_PATH", str(MODEL_DIR / "plant_disease_model.keras")))
+METADATA_PATH = Path(os.getenv("DISEASE_METADATA_PATH", str(MODEL_DIR / "plant_disease_model_metadata.json")))
 MAX_IMAGE_PIXELS = 20_000_000
 
 
@@ -17,6 +21,18 @@ class DiseaseModelUnavailable(RuntimeError):
 
 class InvalidDiseaseImage(ValueError):
     """Raised when image bytes cannot be decoded or scored safely."""
+
+
+def model_info():
+    try:
+        metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+        return {"model": metadata.get("model_name", MODEL_PATH.stem),
+                "class_names": metadata["class_names"], "image_size": metadata["image_size"],
+                "weights_present": MODEL_PATH.is_file(), "experimental": True,
+                "evaluation": metadata.get("evaluation"),
+                "note": "Chưa có kiểm định độc lập; điểm model không phải xác suất mắc bệnh đã hiệu chuẩn."}
+    except (OSError, ValueError, KeyError):
+        raise DiseaseModelUnavailable("Không đọc được cấu hình model ảnh") from None
 
 
 @lru_cache(maxsize=1)
@@ -35,13 +51,19 @@ def _load_model():
         metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
         class_names = metadata["class_names"]
         image_size = metadata["image_size"]
-        if not isinstance(class_names, list) or len(class_names) < 2:
+        if (not isinstance(class_names, list) or len(class_names) < 2
+                or any(not isinstance(name, str) or not name for name in class_names)
+                or len(set(class_names)) != len(class_names)):
             raise ValueError("Invalid class metadata")
         if not isinstance(image_size, int) or not 32 <= image_size <= 1024:
             raise ValueError("Invalid image size metadata")
-        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        if metadata.get("model_sha256") and hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest() != metadata["model_sha256"]:
+            raise ValueError("Model checksum does not match metadata")
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False, safe_mode=True)
         if int(model.output_shape[-1]) != len(class_names):
             raise ValueError("Model output does not match class metadata")
+        if tuple(model.input_shape[1:]) != (image_size, image_size, 3):
+            raise ValueError("Model input does not match metadata")
         return tf, model, metadata
     except Exception as exc:
         raise DiseaseModelUnavailable(
@@ -104,12 +126,23 @@ def predict_disease(image_bytes: bytes, expected_content_type: str | None = None
     tf, model, metadata = _load_model()
     image_size = metadata["image_size"]
     try:
-        image = tf.io.decode_image(
-            image_bytes, channels=3, expand_animations=False
-        )
-        image = tf.ensure_shape(image, (None, None, 3))
-        image = tf.image.resize(image, (image_size, image_size), antialias=True)
-        scores = model.predict(tf.expand_dims(image, axis=0), verbose=0)[0]
+        if metadata.get("preprocessing") == "pil_rgb_bicubic_0_255":
+            # Match the supplied ai-service exactly; the model embeds Rescaling.
+            import numpy as np
+            from PIL import Image
+            try:
+                with Image.open(io.BytesIO(image_bytes)) as original:
+                    image = np.asarray(original.convert("RGB").resize(
+                        (image_size, image_size), Image.Resampling.BICUBIC), dtype=np.float32)
+            except (OSError, ValueError) as exc:
+                raise InvalidDiseaseImage("Không đọc được nội dung ảnh hợp lệ") from exc
+        else:
+            image = tf.io.decode_image(image_bytes, channels=3, expand_animations=False)
+            image = tf.ensure_shape(image, (None, None, 3))
+            image = tf.image.resize(image, (image_size, image_size), antialias=True)
+        scores = model(tf.expand_dims(image, axis=0), training=False).numpy()[0]
+    except InvalidDiseaseImage:
+        raise
     except (tf.errors.InvalidArgumentError, ValueError) as exc:
         raise InvalidDiseaseImage("Không đọc được nội dung ảnh hợp lệ") from exc
     except Exception as exc:
@@ -121,8 +154,12 @@ def predict_disease(image_bytes: bytes, expected_content_type: str | None = None
     ranked = sorted(
         zip(class_names, scores.tolist()), key=lambda item: item[1], reverse=True
     )
+    if any(not math.isfinite(float(v)) or not 0 <= v <= 1 for _, v in ranked) or abs(sum(v for _, v in ranked) - 1) > 0.01:
+        raise DiseaseModelUnavailable("Điểm model không hợp lệ")
     return {
         "class_name": ranked[0][0],
+        "class_group": metadata.get("class_groups", {}).get(ranked[0][0], "unknown"),
+        "model": metadata.get("model_name", MODEL_PATH.stem),
         "scores": {name: round(float(score), 6) for name, score in ranked},
         "score_note": "Điểm softmax thử nghiệm, chưa được hiệu chuẩn thành độ tin cậy.",
         "experimental": True,

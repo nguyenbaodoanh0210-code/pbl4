@@ -117,7 +117,7 @@ function setup(initial = '/') {
 test('navigation to camera AI page creates reversible URL and history entry (Stage 4B)', () => {
   const f = setup();
   f.context.writeRoute(true);
-  assert.equal(f.location.search, '');
+  assert.equal(f.location.search, '?gh=garden-outdoor-01');
 
   f.navigateRoute(() => {
     f.state.page = 'camera';
@@ -128,7 +128,7 @@ test('navigation to camera AI page creates reversible URL and history entry (Sta
   f.navigateRoute(() => {
     f.state.page = 'home';
   });
-  assert.equal(f.location.search, '');
+  assert.equal(f.location.search, '?gh=garden-outdoor-01');
 });
 
 test('navigation to garden detail and area creation preserves context (Stage 4C)', () => {

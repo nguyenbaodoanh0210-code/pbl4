@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 import keras
 import numpy as np
 from PIL import Image
@@ -18,7 +19,7 @@ app.add_middleware(
 )
 
 # 1. Tải mô hình một lần duy nhất khi khởi động server
-MODEL_PATH = "plant_disease_model.keras"
+MODEL_PATH = Path(__file__).resolve().parents[4] / "api" / "ml_models" / "plant_disease_model.keras"
 model = keras.models.load_model(MODEL_PATH)
 
 # 2. Thay thế danh sách này bằng tên 5 nhãn thực tế lúc bạn huấn luyện mô hình (đúng thứ tự 0 -> 4)

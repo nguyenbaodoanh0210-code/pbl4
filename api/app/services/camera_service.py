@@ -232,8 +232,8 @@ def run_camera_diagnosis(
     model_version = MODEL_VERSION
     try:
         cnn_result = infer_fn(image_bytes, detected_type)
-        if isinstance(cnn_result, dict) and cnn_result.get("model_version"):
-            model_version = str(cnn_result["model_version"])
+        if isinstance(cnn_result, dict):
+            model_version = str(cnn_result.get("model_version") or cnn_result.get("model") or MODEL_VERSION)
     except InvalidDiseaseImage as exc:
         (UPLOAD_DIR / filename).unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=str(exc)) from None

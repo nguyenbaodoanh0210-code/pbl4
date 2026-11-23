@@ -4,8 +4,6 @@ sqlalchemy
 psycopg2-binary
 paho-mqtt
 python-dotenv
-joblib
-pandas
 pyserial
 scikit-learn
 python-multipart

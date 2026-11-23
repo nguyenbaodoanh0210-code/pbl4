@@ -28,83 +28,7 @@ import {
 } from './components.js';
 import { addGreenhouseButton } from './gardenView.js';
 
-function renderPumpControlCard(garden) {
-  const { pump, logs } = currentPumpData(garden.greenhouse_id);
-  const mode = pump?.control_mode || 'AUTO';
-  const isOn = Boolean(pump?.is_on);
-  const isAuto = mode === 'AUTO';
-  const busy = state.pumpBusy;
-  const rules = pump?.auto_rules || {};
-
-  const changedByMap = {
-    USER: 'Điều khiển thủ công',
-    AUTO_RULE: 'Luật tự động ngoài trời',
-    AI: 'Đề xuất AI',
-  };
-  const changedByLabel = changedByMap[pump?.last_changed_by] || 'Hệ thống';
-
-  const feedbackHtml = state.pumpError
-    ? '<div class="banner danger pump-feedback" role="alert">' + esc(state.pumpError) + '</div>'
-    : state.pumpMessage
-      ? '<div class="banner pump-feedback" role="status">' + esc(state.pumpMessage) + '</div>'
-      : '';
-
-  const recentLogsHtml = logs.length
-    ? '<div class="pump-history"><div class="pump-history-title">Lịch sử điều khiển gần đây</div>' +
-      logs
-        .slice(0, 3)
-        .map(
-          (log) =>
-            '<div class="pump-log-item">' +
-            '<div class="pump-log-head"><strong>' +
-            esc(log.action === 'TURN_ON' ? 'Bật bơm' : log.action === 'TURN_OFF' ? 'Tắt bơm' : 'Đổi chế độ') +
-            '</strong><span>' + formatDate(log.created_at) + '</span></div>' +
-            '<p class="tiny">' + esc(log.reason || 'Đã ghi nhận lệnh.') + '</p>' +
-            '</div>'
-        )
-        .join('') +
-      '</div>'
-    : '<p class="tiny" style="margin-top:14px">Chưa có lịch sử bật/tắt bơm nước.</p>';
-
-  return (
-    '<section class="card pump-control-card" aria-labelledby="pump-card-title">' +
-    '<div class="pump-card-header">' +
-    '<div><div class="tag">ĐIỀU KHIỂN THIẾT BỊ NGOÀI TRỜI</div><h3 id="pump-card-title" class="card-title">Bơm nước tưới vườn</h3></div>' +
-    pill(isOn ? 'Đang bật' : 'Đang tắt', isOn ? '' : 'offline') +
-    '</div>' +
-
-    '<div class="pump-mode-block">' +
-    '<span class="field-label">Chế độ vận hành</span>' +
-    '<div class="segmented pump-mode-toggle" role="group" aria-label="Chế độ điều khiển bơm nước">' +
-    '<button type="button" data-pump-mode="AUTO" class="' + (isAuto ? 'selected' : '') + '" ' + (busy ? 'disabled' : '') + '>Tự động (Auto)</button>' +
-    '<button type="button" data-pump-mode="MANUAL" class="' + (!isAuto ? 'selected' : '') + '" ' + (busy ? 'disabled' : '') + '>Thủ công (Manual)</button>' +
-    '</div>' +
-    '</div>' +
-
-    '<div class="pump-switch-panel ' + (isOn ? 'is-on' : 'is-off') + '">' +
-    '<div class="pump-switch-copy">' +
-    '<strong>' + (isOn ? 'Bơm nước đang tưới' : 'Bơm nước đang tạm dừng') + '</strong>' +
-    '<span class="tiny">Cập nhật: ' + formatDate(pump?.updated_at) + ' · ' + esc(changedByLabel) + '</span>' +
-    '</div>' +
-    '<button type="button" class="' + (isOn ? 'secondary-button pump-stop-btn' : 'primary-button') + ' pump-toggle-btn" ' +
-    'data-pump-toggle="' + (isOn ? 'off' : 'on') + '" ' +
-    (isAuto || busy ? 'disabled' : '') + '>' +
-    (busy ? 'Đang gửi lệnh…' : isOn ? 'Tắt bơm nước' : 'Bật bơm nước') +
-    '</button>' +
-    '</div>' +
-
-    (isAuto
-      ? '<p class="tiny pump-auto-note">Hệ thống đang ở chế độ <strong>Tự động</strong>: tự bật bơm khi nhiệt độ ≥ ' +
-        fmt(rules.turn_on_temp_above ?? 33, 0) + '°C hoặc độ ẩm ≤ ' + fmt(rules.turn_on_humidity_below ?? 50, 0) +
-        '%, và tự tắt khi độ ẩm ≥ ' + fmt(rules.turn_off_humidity_above ?? 75, 0) +
-        '% để hạn chế nấm bệnh. Chuyển sang <strong>Thủ công</strong> để bật/tắt trực tiếp.</p>'
-      : '<p class="tiny pump-auto-note">Đang ở chế độ <strong>Thủ công</strong>: bạn có toàn quyền bật/tắt bơm nước ngay lập tức.</p>') +
-
-    feedbackHtml +
-    recentLogsHtml +
-    '</section>'
-  );
-}
+import { renderPumpControlCard } from './irrigationView.js';
 
 function renderInlineAnalyticsCard(device) {
   const rows = getPeriodLogs(device);
@@ -178,7 +102,7 @@ export function renderDashboardView() {
 
     '<section class="dashboard-overview">' +
     '<div class="section-heading"><h2>Thông số môi trường thời gian thực</h2><span>' + cropSummary + ' · ' + formatDate(latest?.timestamp) + '</span></div>' +
-    '<div class="metric-grid metric-grid-3">' +
+    '<div class="metric-grid metric-grid-4">' +
     OUTDOOR_METRICS.map((m) => metricCard(m, latest?.[m[0]], thresholds)).join('') +
     '</div>' +
     '</section>' +

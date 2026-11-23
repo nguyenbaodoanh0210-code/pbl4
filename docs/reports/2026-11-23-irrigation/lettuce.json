@@ -1,0 +1,50 @@
+{
+  "source": "https://data.mendeley.com/datasets/294zk6k5wf/2",
+  "doi": "10.17632/294zk6k5wf.2",
+  "license": "CC BY 4.0",
+  "authors": "Georgios Fevgas; Thomas Lagkas; Vasileios Argyriou; Panagiotis Sarigiannidis",
+  "sha256": "30303a92d7ab7462435d18d496941e9ff4bf43a07b788b85d22b3d8e5055dd83",
+  "data_source": "measured",
+  "raw_rows": 145,
+  "plants": 2,
+  "features": [
+    "moisture_pct",
+    "lag_1h_pct",
+    "hour_sin",
+    "hour_cos"
+  ],
+  "target": "soil moisture at next hourly reading (55–65 minutes)",
+  "split": "chronological 70/15/15, target overlap purged; same split for both plants and models",
+  "rows": {
+    "train": 198,
+    "validation": 40,
+    "test": 44
+  },
+  "automatic_control_approved": false,
+  "limitations": [
+    "Only two lettuces over six days; no independent garden test.",
+    "No temperature, light, irrigation amount or rain labels. Cannot train a watering-time or weather model.",
+    "One plant normally irrigated, one withheld; treatment is NOT a correct-action label.",
+    "The data cannot validate chili irrigation or causal effects of water amount."
+  ],
+  "metrics": {
+    "Persistence": {
+      "mae_pp": 0.5909090909090909,
+      "rmse_pp": 0.9534625892455924,
+      "r2": 0.9988407103020674,
+      "within_5pp_pct": 100.0
+    },
+    "CatBoost": {
+      "mae_pp": 20.860364002493853,
+      "rmse_pp": 29.69674979805919,
+      "r2": -0.12461145182503897,
+      "within_5pp_pct": 50.0
+    },
+    "RandomForest": {
+      "mae_pp": 20.3861324179293,
+      "rmse_pp": 28.961237776216503,
+      "r2": -0.06959385752668457,
+      "within_5pp_pct": 50.0
+    }
+  }
+}

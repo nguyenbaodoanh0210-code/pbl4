@@ -1,259 +1,283 @@
-"""Business logic for outdoor Pump actuator controls (Manual & Auto)."""
-
-from datetime import datetime, timezone
+"""Soil-based irrigation with bounded commands and explicit board feedback."""
+from datetime import datetime, timedelta, timezone
+import os
 import uuid
-
+from zoneinfo import ZoneInfo
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
-
 from ..models import ActuatorLog, ActuatorState, Device, Greenhouse, SensorLog, User
 from ..schemas import ActuatorUpdateInput
+from ..schemas.actuator import IrrigationRules
+from .sensor_validation import quality_problems, utc
 from .mqtt_publisher import control_topic, publish_mqtt_json
+from .weather_service import forecast, weather_adjustment
 
 
-VALID_ACTUATOR_TYPES = {"PUMP"}
-VALID_CONTROL_MODES = {"MANUAL", "AUTO"}
-
-DEFAULT_AUTO_RULES = {
-    "PUMP": {
-        "turn_on_temp_above": 33.0,
-        "turn_on_humidity_below": 50.0,
-        "turn_off_humidity_above": 75.0,
-    },
-}
+def policy(item):
+    try:
+        return IrrigationRules.model_validate(item.auto_rules or {})
+    except (ValidationError, TypeError):
+        return None
 
 
-def serialize_actuator(item: ActuatorState) -> dict:
-    return {
-        "actuator_id": item.actuator_id,
-        "greenhouse_id": item.greenhouse_id,
-        "area_id": item.area_id,
-        "device_id": item.device_id,
-        "actuator_type": item.actuator_type,
-        "control_mode": item.control_mode,
-        "is_on": bool(item.is_on),
-        "auto_rules": item.auto_rules or DEFAULT_AUTO_RULES.get(item.actuator_type, {}),
-        "last_changed_by": item.last_changed_by,
-        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
-    }
+def logs_for(db, item, since=None):
+    query = db.query(ActuatorLog).filter(ActuatorLog.actuator_id == item.actuator_id)
+    if since:
+        query = query.filter(ActuatorLog.created_at >= since)
+    return query.order_by(ActuatorLog.created_at.desc()).all()
 
 
-def serialize_actuator_log(item: ActuatorLog) -> dict:
-    return {
-        "log_id": item.log_id,
-        "actuator_id": item.actuator_id,
-        "user_id": item.user_id,
-        "action": item.action,
-        "trigger_source": item.trigger_source,
-        "reason": item.reason,
-        "ack_status": item.ack_status,
-        "created_at": item.created_at.isoformat() if item.created_at else None,
-    }
+def latest_start(db, item):
+    return db.query(ActuatorLog).filter(ActuatorLog.actuator_id == item.actuator_id,
+        ActuatorLog.action == "TURN_ON", ActuatorLog.ack_status != "FAILED").order_by(ActuatorLog.created_at.desc()).first()
 
 
-def ensure_default_actuators(db: Session, greenhouse_id: str) -> list[ActuatorState]:
-    existing = (
-        db.query(ActuatorState)
-        .filter(
-            ActuatorState.greenhouse_id == greenhouse_id,
-            ActuatorState.area_id.is_(None),
-            ActuatorState.actuator_type == "PUMP",
-        )
-        .first()
-    )
-    if existing is None:
-        now = datetime.now(timezone.utc)
-        existing = ActuatorState(
-            actuator_id=f"act-{uuid.uuid4().hex[:12]}",
-            greenhouse_id=greenhouse_id,
-            area_id=None,
-            actuator_type="PUMP",
-            control_mode="AUTO",
-            is_on=False,
-            auto_rules=dict(DEFAULT_AUTO_RULES["PUMP"]),
-            last_changed_by="AUTO_RULE",
-            updated_at=now,
-        )
-        db.add(existing)
-        db.commit()
-        db.refresh(existing)
-    return [existing]
+def runtime_used(db, item, now):
+    # Conservative budget: each accepted start reserves its entire requested duration.
+    # Failed broker sends are excluded; no dependency on ACK delivery.
+    return sum(log.duration_seconds or 120 for log in logs_for(db, item, now-timedelta(hours=24))
+        if log.action == "TURN_ON" and log.ack_status != "FAILED")
 
 
-def get_garden_actuators_payload(db: Session, greenhouse_id: str) -> dict:
-    actuators = ensure_default_actuators(db, greenhouse_id)
-    actuator_ids = [item.actuator_id for item in actuators]
-    logs = (
-        db.query(ActuatorLog)
-        .filter(ActuatorLog.actuator_id.in_(actuator_ids))
-        .order_by(ActuatorLog.created_at.desc())
-        .limit(10)
-        .all()
-        if actuator_ids
-        else []
-    )
-    return {
-        "greenhouse_id": greenhouse_id,
-        "actuators": [serialize_actuator(item) for item in actuators],
-        "recent_logs": [serialize_actuator_log(item) for item in logs],
-    }
+def serialize_actuator(item, db=None, now=None):
+    now = now or datetime.now(timezone.utc)
+    rules = policy(item)
+    start = latest_start(db, item) if db else None
+    deadline = utc(start.acknowledged_at or start.created_at)+timedelta(seconds=start.duration_seconds or 120) if start and item.is_on else None
+    fresh = item.reported_at is not None and (now-utc(item.reported_at)).total_seconds() <= 120
+    state = "UNKNOWN"
+    if fresh:
+        state = "RUNNING" if item.reported_on else "STOPPED"
+    if item.is_on and (not fresh or not item.reported_on):
+        state = "PENDING"
+    if not item.is_on and fresh and item.reported_on:
+        state = "PENDING_STOP"
+    last_ack = None
+    if db:
+        last_ack = db.query(ActuatorLog).filter(ActuatorLog.actuator_id == item.actuator_id,
+            ActuatorLog.action == "TURN_ON", ActuatorLog.acknowledged_at.is_not(None)).order_by(ActuatorLog.acknowledged_at.desc()).first()
+    return dict(actuator_id=item.actuator_id, greenhouse_id=item.greenhouse_id, area_id=item.area_id,
+        device_id=item.device_id, actuator_type=item.actuator_type, control_mode=item.control_mode,
+        is_on=bool(item.is_on), status=state, reported_on=item.reported_on if fresh else None,
+        reported_at=item.reported_at.isoformat() if item.reported_at else None,
+        started_at=last_ack.acknowledged_at.isoformat() if last_ack and fresh and item.reported_on else None,
+        scheduled_stop_at=deadline.isoformat() if deadline else None,
+        last_irrigation_at=last_ack.acknowledged_at.isoformat() if last_ack else None,
+        next_irrigation_at=None,
+        next_irrigation_reason="Chờ số đo đất mới và điều kiện an toàn" if item.control_mode == "AUTO" else "Thủ công; chưa có lịch tưới",
+        auto_rules=item.auto_rules or {}, last_changed_by=item.last_changed_by,
+        updated_at=item.updated_at.isoformat() if item.updated_at else None)
 
 
-def update_actuator_control(
-    db: Session,
-    greenhouse: Greenhouse,
-    actuator_type: str,
-    body: ActuatorUpdateInput,
-    current_user: User,
-) -> dict:
-    kind = actuator_type.strip().upper()
-    if kind not in VALID_ACTUATOR_TYPES:
-        raise HTTPException(
-            status_code=422,
-            detail="Hệ thống khu vườn ngoài trời chỉ hỗ trợ điều khiển Bơm nước (PUMP)",
-        )
+def serialize_actuator_log(item):
+    return dict(log_id=item.log_id, actuator_id=item.actuator_id, user_id=item.user_id,
+        action=item.action, trigger_source=item.trigger_source, reason=item.reason, ack_status=item.ack_status,
+        created_at=item.created_at.isoformat(), acknowledged_at=item.acknowledged_at.isoformat() if item.acknowledged_at else None)
 
-    actuators = ensure_default_actuators(db, greenhouse.greenhouse_id)
-    target = actuators[0]
 
-    new_mode = target.control_mode
-    if body.control_mode is not None:
-        candidate_mode = body.control_mode.strip().upper()
-        if candidate_mode not in VALID_CONTROL_MODES:
-            raise HTTPException(
-                status_code=422, detail="control_mode phải là MANUAL hoặc AUTO"
-            )
-        new_mode = candidate_mode
+def ensure_default_actuators(db, greenhouse_id):
+    rows = db.query(ActuatorState).filter(ActuatorState.greenhouse_id == greenhouse_id,
+        ActuatorState.actuator_type == "PUMP").order_by(ActuatorState.actuator_id).all()
+    if not rows:
+        row = ActuatorState(actuator_id="act-"+uuid.uuid4().hex[:12], greenhouse_id=greenhouse_id,
+            actuator_type="PUMP", control_mode="MANUAL", is_on=False, auto_rules={},
+            last_changed_by="USER", updated_at=datetime.now(timezone.utc))
+        db.add(row)
+        db.flush()
+        rows = [row]
+    return rows
 
-    if body.is_on is not None and new_mode != "MANUAL":
-        raise HTTPException(
-            status_code=409,
-            detail="Bơm nước đang ở chế độ Tự động (AUTO). Hãy chuyển sang Thủ công (MANUAL) trước khi bật/tắt.",
-        )
 
-    mode_changed = new_mode != target.control_mode
-    state_changed = body.is_on is not None and bool(body.is_on) != bool(target.is_on)
+def daily_statistics(logs, zone, now):
+    """Confirmed intervals only. An unmatched start has UNKNOWN duration, never invented liters."""
+    result = {}
+    active = None
+    for log in sorted((l for l in logs if l.acknowledged_at), key=lambda l: l.acknowledged_at):
+        moment = utc(log.acknowledged_at)
+        key = moment.astimezone(zone).date().isoformat()
+        row = result.setdefault(key, dict(date=key, starts=0, confirmed_seconds=0, volume_liters=None))
+        if log.action == "TURN_ON" and active is None:
+            row["starts"] += 1
+            active = moment
+        elif log.action == "TURN_OFF" and active is not None:
+            cursor = active
+            while cursor < moment:
+                local = cursor.astimezone(zone)
+                midnight = datetime.combine(local.date()+timedelta(days=1), datetime.min.time(), zone).astimezone(timezone.utc)
+                end = min(moment, midnight)
+                day = result.setdefault(local.date().isoformat(), dict(date=local.date().isoformat(), starts=0, confirmed_seconds=0, volume_liters=None))
+                day["confirmed_seconds"] += max(0, int((end-cursor).total_seconds()))
+                cursor = end
+            active = None
+    return sorted(result.values(), key=lambda r: r["date"], reverse=True)[:7]
 
+
+def get_garden_actuators_payload(db, greenhouse_id):
+    rows = ensure_default_actuators(db, greenhouse_id)
     now = datetime.now(timezone.utc)
-    target.control_mode = new_mode
-    if body.is_on is not None:
-        target.is_on = bool(body.is_on)
-    if body.auto_rules is not None:
-        target.auto_rules = body.auto_rules
-    target.last_changed_by = "USER"
-    target.updated_at = now
-
-    if state_changed:
-        action = "TURN_ON" if target.is_on else "TURN_OFF"
-    elif mode_changed:
-        action = "MODE_CHANGE"
-    else:
-        action = "TURN_ON" if target.is_on else "TURN_OFF"
-
-    mqtt_payload = {
-        "greenhouse_id": greenhouse.greenhouse_id,
-        "device_id": target.device_id,
-        "actuator_type": "PUMP",
-        "control_mode": target.control_mode,
-        "is_on": bool(target.is_on),
-        "timestamp": now.isoformat(),
-    }
-    mqtt_result = publish_mqtt_json(
-        control_topic(greenhouse.greenhouse_id), mqtt_payload
-    )
-
-    default_reason = (
-        f"Người dùng chuyển Bơm nước sang chế độ {target.control_mode}"
-        if mode_changed and not state_changed
-        else f"Người dùng {'bật' if target.is_on else 'tắt'} Bơm nước ở chế độ {target.control_mode}"
-    )
-    log = ActuatorLog(
-        log_id=str(uuid.uuid4()),
-        actuator_id=target.actuator_id,
-        user_id=current_user.user_id,
-        action=action,
-        trigger_source="MANUAL",
-        reason=(body.reason.strip() if body.reason else default_reason),
-        ack_status="ACK" if mqtt_result["published"] else "PENDING",
-        created_at=now,
-    )
-    db.add(log)
+    logs = db.query(ActuatorLog).filter(ActuatorLog.actuator_id.in_([r.actuator_id for r in rows]),
+        ActuatorLog.created_at >= now-timedelta(days=8)).order_by(ActuatorLog.created_at.desc()).all()
+    serialized = []
+    for item in rows:
+        rule = policy(item)
+        data = serialize_actuator(item, db, now)
+        data["daily_statistics"] = daily_statistics([l for l in logs if l.actuator_id == item.actuator_id],
+            ZoneInfo(rule.timezone if rule else "Asia/Ho_Chi_Minh"), now)
+        data["weather"] = forecast(rule.latitude, rule.longitude, rule.timezone) if rule else {"available": False, "reason": "Chưa cấu hình tọa độ vườn"}
+        serialized.append(data)
     db.commit()
-    db.refresh(target)
-    db.refresh(log)
-
-    return {
-        "actuator": serialize_actuator(target),
-        "log": serialize_actuator_log(log),
-        "mqtt": mqtt_result,
-    }
+    return {"greenhouse_id": greenhouse_id, "actuators": serialized,
+            "recent_logs": [serialize_actuator_log(l) for l in logs[:30]]}
 
 
-def evaluate_auto_actuators(
-    db: Session,
-    device: Device,
-    sensor_log: SensorLog,
-    thresholds: dict,
-) -> list[dict]:
-    """Evaluate AUTO rules for the outdoor water Pump based on DHT22 + Light readings."""
-    if not device.greenhouse_id:
-        return []
+def binding_problem(db, item, rule):
+    if not rule or not rule.hardware_verified:
+        return "Cần cấu hình và xác nhận hiệu chuẩn cảm biến, bộ ngắt bơm trên board"
+    for ident, sensor in [(rule.sensor_device_id, True), (item.device_id, False)]:
+        dev = db.query(Device).filter(Device.device_id == ident, Device.greenhouse_id == item.greenhouse_id,
+                                     Device.deleted_at.is_(None), Device.status == "ACTIVE").first()
+        if not dev or dev.area_id != item.area_id or (sensor and dev.device_type != "SENSOR_NODE") or (not sensor and dev.device_type not in {"ACTUATOR", "PUMP", "SENSOR_NODE"}):
+            return "Cảm biến và bơm phải hoạt động, thuộc đúng vườn và cùng khu vực đã chọn"
+    return None
 
-    actuators = ensure_default_actuators(db, device.greenhouse_id)
-    changes: list[dict] = []
+
+def start_problem(db, item, rule, now):
+    problem = binding_problem(db, item, rule)
+    if problem:
+        return problem
+    if rule.locked:
+        return "Đang khóa tưới"
+    readings = db.query(SensorLog).filter(SensorLog.device_id == rule.sensor_device_id).order_by(SensorLog.timestamp.desc()).limit(120).all()
+    if not readings:
+        return "Chưa có số đo đất"
+    problems = quality_problems(readings[0], readings[1:], now=now, max_age=rule.max_sensor_age_seconds)
+    if problems:
+        return "; ".join(problems)
+    latest = readings[0]
+    if latest.soil_moisture >= rule.stop_at_pct:
+        return "Độ ẩm đất đã đạt ngưỡng dừng"
+    if rule.max_temperature_c is not None and latest.temperature > rule.max_temperature_c:
+        return "Ngoài giới hạn nhiệt độ đã cấu hình"
+    if rule.max_light_lux is not None and latest.light_level > rule.max_light_lux:
+        return "Ngoài giới hạn ánh sáng đã cấu hình"
+    clock = now.astimezone(ZoneInfo(rule.timezone)).strftime("%H:%M")
+    if rule.allowed_start:
+        inside = rule.allowed_start <= clock < rule.allowed_end if rule.allowed_start < rule.allowed_end else clock >= rule.allowed_start or clock < rule.allowed_end
+        if not inside:
+            return "Ngoài khung giờ tưới"
+    if not item.is_on:
+        last = latest_start(db, item)
+        if last and (now-utc(last.created_at)).total_seconds() < rule.max_run_seconds + rule.cooldown_seconds:
+            return "Chưa hết khoảng nghỉ giữa hai lần tưới"
+        if runtime_used(db, item, now) + rule.max_run_seconds > rule.max_daily_seconds:
+            return "Đã đạt ngân sách thời gian tưới trong 24 giờ"
+    return None
+
+
+def send_command(db, item, turn_on, source, reason, user_id=None, duration=None):
     now = datetime.now(timezone.utc)
-    temp = sensor_log.temperature
-    hum = sensor_log.humidity
+    rule = policy(item)
+    command_id = str(uuid.uuid4())
+    token = os.getenv("DEVICE_INGEST_TOKEN", "")
+    seconds = min(duration or (rule.max_run_seconds if rule else 30), 120)
+    payload = dict(command_id=command_id, device_id=item.device_id, greenhouse_id=item.greenhouse_id,
+        command_token=token, actuator_type="PUMP", control_mode=item.control_mode, is_on=turn_on,
+        issued_at=int(now.timestamp()), expires_at=int(now.timestamp())+10, run_seconds=seconds)
+    result = publish_mqtt_json(control_topic(item.greenhouse_id), payload) if token and item.device_id else {"published": False, "error": "Thiếu token hoặc thiết bị bơm"}
+    db.add(ActuatorLog(log_id=command_id, actuator_id=item.actuator_id, user_id=user_id,
+        action="TURN_ON" if turn_on else "TURN_OFF", trigger_source=source, reason=reason,
+        ack_status="PENDING" if result["published"] else "FAILED", created_at=now, duration_seconds=seconds if turn_on else 0))
+    if result["published"]:
+        item.is_on = turn_on
+        item.last_changed_by = "USER" if source == "MANUAL" else "AUTO_RULE"
+        item.updated_at = now
+    db.flush()
+    return result
 
-    for item in actuators:
-        if item.control_mode != "AUTO" or item.actuator_type != "PUMP":
+
+def update_actuator_control(db: Session, greenhouse: Greenhouse, actuator_type: str,
+                            body: ActuatorUpdateInput, current_user: User):
+    if actuator_type.upper() != "PUMP":
+        raise HTTPException(422, "Chỉ hỗ trợ PUMP")
+    rows = ensure_default_actuators(db, greenhouse.greenhouse_id)
+    target = next((r for r in rows if r.area_id == body.area_id), None)
+    if target is None:
+        from ..models import GreenhouseArea
+        if not db.query(GreenhouseArea).filter_by(area_id=body.area_id, greenhouse_id=greenhouse.greenhouse_id).first():
+            raise HTTPException(422, "Khu vực không thuộc vườn")
+        target = ActuatorState(actuator_id="act-"+uuid.uuid4().hex[:12], greenhouse_id=greenhouse.greenhouse_id,
+            area_id=body.area_id, actuator_type="PUMP", control_mode="MANUAL", is_on=False,
+            auto_rules={}, last_changed_by="USER", updated_at=datetime.now(timezone.utc))
+        db.add(target)
+        db.flush()
+    target = db.query(ActuatorState).filter_by(actuator_id=target.actuator_id).with_for_update().one()
+    mode = body.control_mode.upper() if body.control_mode else target.control_mode
+    if mode not in {"AUTO", "MANUAL"}:
+        raise HTTPException(422, "Chế độ phải là AUTO hoặc MANUAL")
+    # STOP always allowed, even in AUTO or with invalid/missing sensor readings.
+    if body.is_on is False:
+        target.control_mode = "MANUAL"
+        result = send_command(db, target, False, "MANUAL", body.reason or "Yêu cầu dừng", current_user.user_id)
+        db.commit()
+        return {"actuator": serialize_actuator(target, db), "mqtt": result}
+    if target.is_on and (body.auto_rules is not None or body.device_id is not None or mode != target.control_mode):
+        raise HTTPException(409, "Dừng bơm trước khi đổi cấu hình")
+    if body.auto_rules is not None:
+        target.auto_rules = body.auto_rules.model_dump()
+    if body.device_id is not None:
+        target.device_id = body.device_id
+        shared = db.query(ActuatorState).filter(ActuatorState.device_id == target.device_id,
+            ActuatorState.actuator_id != target.actuator_id).first()
+        if shared:
+            raise HTTPException(409, "Board bơm đã gắn với khu vực khác")
+    rule = policy(target)
+    if mode == "AUTO" or body.is_on:
+        problem = binding_problem(db, target, rule)
+        if problem:
+            raise HTTPException(422, problem)
+    if body.is_on and mode != "MANUAL":
+        raise HTTPException(409, "Chọn Thủ công để bật bằng tay")
+    target.control_mode = mode
+    result = {"published": False, "error": None}
+    if body.is_on and not target.is_on:
+        problem = start_problem(db, target, rule, datetime.now(timezone.utc))
+        if problem:
+            raise HTTPException(409, problem)
+        result = send_command(db, target, True, "MANUAL", body.reason or "Tưới thủ công có thời hạn", current_user.user_id)
+    target.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"actuator": serialize_actuator(target, db), "mqtt": result}
+
+
+def evaluate_auto_actuators(db, device, sensor_log, thresholds=None):
+    now = datetime.now(timezone.utc)
+    changes = []
+    rows = db.query(ActuatorState).filter_by(greenhouse_id=device.greenhouse_id, control_mode="AUTO").with_for_update().all()
+    for item in rows:
+        rule = policy(item)
+        if not rule or rule.sensor_device_id != device.device_id:
             continue
-        rules = item.auto_rules or DEFAULT_AUTO_RULES["PUMP"]
-        desired = bool(item.is_on)
-        reason = None
-
-        temp_on = float(rules.get("turn_on_temp_above", thresholds.get("max_temp", 33.0)))
-        hum_on = float(rules.get("turn_on_humidity_below", thresholds.get("min_humidity", 50.0)))
-        hum_off = float(rules.get("turn_off_humidity_above", 75.0))
-
-        if (hum is not None and hum <= hum_on) or (
-            temp is not None and temp >= temp_on and (hum is None or hum < hum_off)
-        ):
-            desired = True
-            reason = (
-                f"Tự động bật Bơm nước: độ ẩm không khí thấp ({hum}%) hoặc nắng nóng ({temp}°C)."
-            )
-        elif hum is not None and hum >= hum_off:
-            desired = False
-            reason = f"Tự động tắt Bơm nước: độ ẩm đã đạt {hum}% (≥ {hum_off}%)."
-
-        if desired != bool(item.is_on) and reason:
-            item.is_on = desired
-            item.last_changed_by = "AUTO_RULE"
-            item.updated_at = now
-            mqtt_result = publish_mqtt_json(
-                control_topic(device.greenhouse_id),
-                {
-                    "greenhouse_id": device.greenhouse_id,
-                    "device_id": item.device_id,
-                    "actuator_type": "PUMP",
-                    "control_mode": "AUTO",
-                    "is_on": desired,
-                    "reason": reason,
-                    "timestamp": now.isoformat(),
-                },
-            )
-            log = ActuatorLog(
-                log_id=str(uuid.uuid4()),
-                actuator_id=item.actuator_id,
-                user_id=None,
-                action="TURN_ON" if desired else "TURN_OFF",
-                trigger_source="AUTO_RULE",
-                reason=reason,
-                ack_status="ACK" if mqtt_result["published"] else "PENDING",
-                created_at=now,
-            )
-            db.add(log)
-            changes.append({"actuator_type": "PUMP", "is_on": desired, "reason": reason})
-
+        problem = start_problem(db, item, rule, now)
+        if item.is_on and problem:
+            changes.append(send_command(db, item, False, "AUTO_RULE", problem))
+        elif not item.is_on and not problem and sensor_log.soil_moisture < rule.start_below_pct:
+            weather = forecast(rule.latitude, rule.longitude, rule.timezone)
+            factor, reason = weather_adjustment(rule, weather, now)
+            # max_run_seconds is a hard cap; baseline is chosen below it to allow morning increase.
+            duration = min(rule.max_run_seconds, max(1, round(rule.base_run_seconds * factor)))
+            changes.append(send_command(db, item, True, "AUTO_RULE", reason, duration=duration))
     return changes
+
+
+def enforce_timeouts(db, now=None):
+    now = now or datetime.now(timezone.utc)
+    rows = db.query(ActuatorState).filter_by(is_on=True).with_for_update().all()
+    for item in rows:
+        rule = policy(item)
+        start = latest_start(db, item)
+        overdue = not start or (now-utc(start.created_at)).total_seconds() >= (start.duration_seconds or 120)
+        problem = start_problem(db, item, rule, now)
+        if overdue or problem:
+            send_command(db, item, False, "AUTO_RULE", "Hết thời hạn tưới" if overdue else problem)
+    db.commit()

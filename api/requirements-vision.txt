@@ -2,3 +2,4 @@
 # Install only in an approved Python environment; this project does not
 # automatically install it into the existing venv.
 tensorflow>=2.21,<2.22
+pillow>=11,<13

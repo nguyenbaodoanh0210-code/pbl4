@@ -1,5 +1,5 @@
 from .actuator import ActuatorUpdateInput
-from .ai import DiseasePredictionOutput, FertilizerPredictionInput, FertilizerPredictionOutput
+from .ai import DiseasePredictionOutput
 from .auth import LoginInput, ProfileUpdateInput, RegisterInput, TokenOutput, UserOutput
 from .camera import CameraLogStatusInput, CaptureTriggerInput
 from .device import DeviceInput, DeviceStatusInput
@@ -14,8 +14,6 @@ __all__ = [
     "DeviceInput",
     "DeviceStatusInput",
     "DiseasePredictionOutput",
-    "FertilizerPredictionInput",
-    "FertilizerPredictionOutput",
     "GreenhouseInput",
     "LoginInput",
     "ProfileUpdateInput",

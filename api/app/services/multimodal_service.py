@@ -8,6 +8,12 @@ from typing import Any
 MODEL_VERSION = "chili_cnn_v1+multimodal_v1"
 
 DISEASE_CATALOG: dict[str, dict[str, Any]] = {
+    "bacterial": {
+        "label_vi": "Dấu hiệu bệnh do vi khuẩn",
+        "profile": "bacterial",
+        "action_chili": "Kiểm tra trực tiếp vết bệnh trên lá ớt, vệ sinh dụng cụ và theo dõi ảnh chụp tiếp theo.",
+        "action_lettuce": "Kiểm tra trực tiếp lá xà lách và đối chiếu thêm trước khi xử lý.",
+    },
     "healthy": {
         "label_vi": "Khỏe mạnh",
         "profile": "healthy",
@@ -87,6 +93,8 @@ def _lookup_disease(class_name: str) -> dict[str, Any]:
     key = (class_name or "").strip().casefold()
     if key in DISEASE_CATALOG:
         return DISEASE_CATALOG[key]
+    if key == "ot_dom_vi_khuan":
+        return DISEASE_CATALOG["bacterial"]
     if "healthy" in key or "khoe" in key:
         return DISEASE_CATALOG["healthy"]
     if "spot" in key or "fung" in key or "nam" in key:
@@ -210,6 +218,8 @@ def fuse_multimodal_diagnosis(
             f"Nhận diện qua hình ảnh lá: '{info['label_vi']}' ({cnn_conf * 100:.1f}%). "
             "Chưa có dữ liệu đo thời tiết xung quanh để đối chiếu thêm."
         )
+    elif profile == "bacterial":
+        reason = f"Hình ảnh gợi ý {info['label_vi']} ({cnn_conf * 100:.1f}%). Cần kiểm tra trực tiếp; cảm biến môi trường không xác nhận tác nhân vi khuẩn."
     elif profile == "fungal":
         if summary["sustained_high_humidity"] and summary["low_light_detected"]:
             delta = 0.12
