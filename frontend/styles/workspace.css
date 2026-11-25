@@ -1,0 +1,492 @@
+/* Spacious website layouts for the authenticated greenhouse workspace. */
+body:has(.app-shell:not(.auth-mode)) {
+  padding: 0;
+  background: var(--bg);
+}
+
+.app-shell:not(.auth-mode) {
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  margin: 0;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  border-radius: 0;
+  overflow: visible;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.app-shell:not(.auth-mode) button,
+.app-shell:not(.auth-mode) select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-shell:not(.auth-mode) button:focus-visible,
+.app-shell:not(.auth-mode) select:focus-visible {
+  outline: 3px solid #84b99a;
+  outline-offset: 3px;
+}
+
+.app-shell:not(.auth-mode) .topbar {
+  height: 80px;
+  padding: 16px 24px;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  background: #ffffffb8;
+}
+
+.app-shell:not(.auth-mode) .brand-mark {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  border-radius: 6px;
+}
+
+.app-shell:not(.auth-mode) .brand-copy { gap: 4px; }
+.app-shell:not(.auth-mode) .brand-copy strong { font-size: 15px; }
+.app-shell:not(.auth-mode) .brand-copy span { font-size: 12px; }
+.app-shell:not(.auth-mode) .header-context { display: none; }
+.app-shell:not(.auth-mode) .avatar { width: 44px; height: 44px; }
+.app-shell:not(.auth-mode) .avatar-initials { font-size: 14px; }
+
+.app-shell:not(.auth-mode) main {
+  width: 100%;
+  max-width: 1500px;
+  padding: 28px 24px 36px;
+  margin: 0 auto;
+}
+
+.app-shell:not(.auth-mode) .page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.app-shell:not(.auth-mode) .page-eyebrow {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.app-shell:not(.auth-mode) .page-title {
+  margin: 0 0 9px;
+  font: 700 30px/1.2 'Manrope', sans-serif;
+  letter-spacing: -.045em;
+}
+
+.app-shell:not(.auth-mode) .subline {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.app-shell:not(.auth-mode) .page-status {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  padding-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.app-shell:not(.auth-mode) .page-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px var(--green-soft);
+}
+
+.app-shell:not(.auth-mode) .page-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.app-shell:not(.auth-mode) .garden-picker {
+  flex: 0 1 340px;
+  min-width: 230px;
+}
+
+.app-shell:not(.auth-mode) .field-label {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64746a;
+}
+
+.app-shell:not(.auth-mode) .greenhouse-select { margin: 0; }
+.app-shell:not(.auth-mode) .select {
+  min-height: 46px;
+  border-radius: 6px;
+  padding: 12px 38px 12px 14px;
+  font-size: 13px;
+  box-shadow: 0 1px 2px #243a2c03;
+}
+
+.app-shell:not(.auth-mode) .select-wrap::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  right: 17px;
+  top: 18px;
+  border: solid var(--green);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.app-shell:not(.auth-mode) .toolbar-note { flex: 1; min-width: 0; }
+.app-shell:not(.auth-mode) .banner {
+  padding: 14px 16px;
+  margin: 12px 0 20px;
+  border: 1px solid #dfe9dc;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.app-shell:not(.auth-mode) .banner.warning { border-color: #efdfbc; }
+.app-shell:not(.auth-mode) .banner.danger { border-color: #efd8d3; }
+.app-shell:not(.auth-mode) .toolbar-note .banner { margin: 0; min-height: 46px; }
+.app-shell:not(.auth-mode) .tiny { font-size: 12px; line-height: 1.65; }
+
+.app-shell:not(.auth-mode) .section-heading {
+  margin: 0 0 16px;
+  gap: 16px;
+  align-items: baseline;
+}
+
+.app-shell:not(.auth-mode) .section-heading h2 {
+  font: 700 18px/1.4 'Manrope', sans-serif;
+  letter-spacing: -.025em;
+}
+
+.app-shell:not(.auth-mode) .section-heading span {
+  font-size: 11px;
+  text-align: right;
+  line-height: 1.6;
+}
+
+.app-shell:not(.auth-mode) .dashboard-overview { margin: 28px 0 24px; }
+.app-shell:not(.auth-mode) .metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.app-shell:not(.auth-mode) .metric {
+  min-height: 126px;
+  padding: 20px;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px #243a2c03;
+}
+
+.app-shell:not(.auth-mode) .metric-label {
+  color: #68796e;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.app-shell:not(.auth-mode) .metric-value {
+  margin-top: 15px;
+  font-size: 34px;
+  line-height: 1.1;
+  color: var(--green-dark);
+}
+
+.app-shell:not(.auth-mode) .metric-unit { margin-left: 7px; font-size: 13px; }
+.app-shell:not(.auth-mode) .dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 20px;
+}
+
+.app-shell:not(.auth-mode) .card {
+  min-width: 0;
+  padding: 22px;
+  margin: 0;
+  border-radius: 6px;
+  box-shadow: 0 3px 8px #243a2c03;
+}
+
+.app-shell:not(.auth-mode) .card-title {
+  margin: 0 0 20px;
+  font: 700 16px/1.5 'Manrope', sans-serif;
+  letter-spacing: -.02em;
+}
+
+.app-shell:not(.auth-mode) .nutrient-card { grid-column: 1 / -1; }
+.app-shell:not(.auth-mode) .nutrient-row { gap: 12px; }
+.app-shell:not(.auth-mode) .nutrient { padding: 16px; border-radius: 4px; }
+.app-shell:not(.auth-mode) .nutrient b { font-size: 26px; color: var(--green-dark); }
+.app-shell:not(.auth-mode) .nutrient small { display: block; margin-top: 8px; font-size: 11px; line-height: 1.5; }
+.app-shell:not(.auth-mode) .nutrient-card > .tiny { margin: 16px 0 0; }
+.app-shell:not(.auth-mode) .status-pill { padding: 6px 10px; font-size: 11px; line-height: 1.5; }
+.app-shell:not(.auth-mode) .row { padding: 13px 0; font-size: 12px; flex-wrap: wrap; }
+.app-shell:not(.auth-mode) .row strong { font-size: 13px; }
+.app-shell:not(.auth-mode) .steps { margin: 0 0 8px; }
+.app-shell:not(.auth-mode) .steps li { margin: 14px 0; gap: 12px; font-size: 12px; line-height: 1.6; }
+.app-shell:not(.auth-mode) .steps li::before { flex-basis: 23px; height: 23px; font-size: 11px; }
+
+.app-shell:not(.auth-mode) .link-button {
+  min-height: 40px;
+  padding: 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.app-shell:not(.auth-mode) .link-button:hover { color: #164931; text-decoration: underline; text-underline-offset: 4px; }
+.app-shell:not(.auth-mode) .primary-button,
+.app-shell:not(.auth-mode) .secondary-button {
+  min-height: 44px;
+  padding: 12px 18px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.app-shell:not(.auth-mode) .primary-button:not(:disabled):hover { background: var(--green-dark); }
+.app-shell:not(.auth-mode) .secondary-button:not(:disabled):hover { background: #f3f7f0; border-color: #c3d4c4; }
+.app-shell:not(.auth-mode) .history-layout { display: grid; gap: 24px; align-items: start; }
+.app-shell:not(.auth-mode) .history-main { min-width: 0; }
+.app-shell:not(.auth-mode) .history-main .page-toolbar { align-items: flex-end; flex-wrap: wrap; }
+.app-shell:not(.auth-mode) .history-main .garden-picker { flex: 1 1 260px; }
+.app-shell:not(.auth-mode) .history-main .section-heading { margin-top: 28px; }
+.app-shell:not(.auth-mode) .segmented { margin: 0; padding: 4px; min-width: 240px; border-radius: 6px; }
+.app-shell:not(.auth-mode) .segmented button { min-height: 38px; padding: 9px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+.app-shell:not(.auth-mode) .tabs-chip { gap: 8px; flex-wrap: wrap; overflow: visible; margin: 0 0 20px; }
+.app-shell:not(.auth-mode) .chip { min-height: 38px; padding: 9px 13px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+.app-shell:not(.auth-mode) .chip:hover { border-color: #a8c7ad; }
+.app-shell:not(.auth-mode) .chart-card { padding: 24px; }
+.app-shell:not(.auth-mode) .chart-card .card-title { margin-bottom: 4px; }
+.app-shell:not(.auth-mode) .chart { width: 100%; height: auto; min-height: 230px; max-height: 360px; aspect-ratio: 2.125; margin: 18px 0 10px; }
+.app-shell:not(.auth-mode) .chart-card .row { border-top: 1px solid var(--line); border-bottom: 0; margin-top: 12px; padding-top: 20px; }
+.app-shell:not(.auth-mode) .history-main > .secondary-button { margin-top: 18px; width: auto; }
+.app-shell:not(.auth-mode) .history-aside { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.app-shell:not(.auth-mode) .history-filters .field-label { margin-top: 16px; }
+.app-shell:not(.auth-mode) .history-filters .tiny { margin: 16px 0 0; }
+.app-shell:not(.auth-mode) .history-summary .row:last-child { border-bottom: 0; }
+.app-shell:not(.auth-mode) .collection-grid,
+.app-shell:not(.auth-mode) .recommendation-grid,
+.app-shell:not(.auth-mode) .device-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.app-shell:not(.auth-mode) .collection-section { margin-top: 28px; }
+.app-shell:not(.auth-mode) .greenhouse-card { padding: 0; overflow: hidden; }
+.app-shell:not(.auth-mode) .greenhouse-cover {
+  min-height: 184px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: 18px;
+  background: linear-gradient(180deg, #123c2610 35%, #123c266b 100%), url('/assets/greenhouse.jpg') center 45% / cover;
+}
+
+.app-shell:not(.auth-mode) .greenhouse-cover-label {
+  display: inline-flex;
+  padding: 6px 10px;
+  border: 1px solid #ffffff40;
+  border-radius: 4px;
+  background: #ffffffeb;
+  color: var(--green-dark);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+.app-shell:not(.auth-mode) .greenhouse-card-body { padding: 22px; }
+.app-shell:not(.auth-mode) .greenhouse-card h3 { margin: 0 0 6px; font-size: 19px; letter-spacing: -.03em; }
+.app-shell:not(.auth-mode) .greenhouse-card .topline { align-items: flex-start; gap: 12px; }
+.app-shell:not(.auth-mode) .icon-tile { width: 42px; height: 42px; flex: 0 0 42px; font-size: 22px; border-radius: 6px; }
+.app-shell:not(.auth-mode) .greenhouse-card .link-button { margin-top: 16px !important; width: 100%; border-top: 1px solid var(--line); padding-top: 16px; }
+.app-shell:not(.auth-mode) .detail-heading { margin: 0 0 30px; }
+.app-shell:not(.auth-mode) .detail-heading .page-title { font-size: 26px; margin-top: 0 !important; }
+.app-shell:not(.auth-mode) .device-card h3 { margin: 18px 0 7px; font-size: 17px; overflow-wrap: anywhere; }
+.app-shell:not(.auth-mode) .device-card .row { margin-top: 16px; }
+.app-shell:not(.auth-mode) .management-notice { display: flex; align-items: center; gap: 20px; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+.app-shell:not(.auth-mode) .management-notice .banner { flex: 1; margin: 0; background: transparent; border: 0; padding: 0; color: var(--muted); }
+.app-shell:not(.auth-mode) .management-notice .primary-button { width: auto; flex-shrink: 0; }
+.app-shell:not(.auth-mode) .recommendation-grid { align-items: stretch; }
+.app-shell:not(.auth-mode) .recommendation-card { display: flex; flex-direction: column; }
+.app-shell:not(.auth-mode) .tag { font-size: 10px; letter-spacing: .09em; }
+.app-shell:not(.auth-mode) .recommendation-card h3 { font-size: 18px; line-height: 1.5; margin: 8px 0; letter-spacing: -.02em; }
+.app-shell:not(.auth-mode) .recommendation-card p { font-size: 13px; line-height: 1.75; margin: 12px 0; }
+.app-shell:not(.auth-mode) .recommendation-card > .secondary-button { align-self: flex-start; width: auto; margin-top: auto; }
+.app-shell:not(.auth-mode) .notification-list { display: grid; gap: 12px; }
+.app-shell:not(.auth-mode) .notification-card { border-left-width: 4px; }
+.app-shell:not(.auth-mode) .notification-card h3 { margin: 12px 0 5px; font: 700 15px/1.5 'Manrope', sans-serif; letter-spacing: -.02em; }
+.app-shell:not(.auth-mode) .notification-card .tiny { margin: 0; }
+.app-shell:not(.auth-mode) .empty-state,
+.app-shell:not(.auth-mode) .card.empty { min-height: 250px; display: grid; place-content: center; padding: 42px 30px; font-size: 14px; line-height: 1.8; }
+.app-shell:not(.auth-mode) .empty-state h2 { color: var(--ink); font: 700 21px/1.5 'Manrope', sans-serif; margin: 0 0 8px; }
+.app-shell:not(.auth-mode) .empty-state p { max-width: 450px; margin: 0 auto; }
+.app-shell:not(.auth-mode) .garden-picker .card.empty { min-height: 46px; padding: 12px 14px; font-size: 12px; text-align: left; }
+.app-shell:not(.auth-mode) .collection-grid > .empty-state,
+.app-shell:not(.auth-mode) .device-grid > .empty-state,
+.app-shell:not(.auth-mode) .recommendation-grid > .empty-state { grid-column: 1 / -1; }
+.app-shell:not(.auth-mode) .history-aside > .secondary-button { grid-column: 1 / -1; }
+.app-shell:not(.auth-mode) .error-page { padding: 26px; border: 1px solid #efd8d3; border-radius: 4px; font-size: 14px; }
+.app-shell:not(.auth-mode) .loading-page { min-height: 55vh; font-size: 14px; }
+.app-shell:not(.auth-mode) .spinner { width: 28px; height: 28px; }
+
+.app-shell:not(.auth-mode) .bottom-nav {
+  width: 100%;
+  max-width: none;
+  bottom: 0;
+  padding: 8px 16px calc(10px + env(safe-area-inset-bottom));
+  border-radius: 0;
+}
+
+.app-shell:not(.auth-mode) .nav-caption,
+.app-shell:not(.auth-mode) .nav-footer { display: none; }
+.app-shell:not(.auth-mode) .nav-item { min-height: 54px; padding: 7px 2px; border-radius: 6px; gap: 4px; }
+.app-shell:not(.auth-mode) .nav-item small { font-size: 10px; }
+.app-shell:not(.auth-mode) .nav-item .nav-icon { width: 23px; height: 23px; }
+.app-shell:not(.auth-mode) .user-panel { border-radius: 6px; }
+.app-shell:not(.auth-mode) .panel-back { border-radius: 6px; }
+.app-shell:not(.auth-mode) .auth-form input,
+.app-shell:not(.auth-mode) .auth-email-label input { border-radius: 6px; }
+.app-shell:not(.auth-mode) .password-field input { border-radius: 6px 0 0 6px; }
+.app-shell:not(.auth-mode) .password-toggle { border-radius: 0 6px 6px 0; }
+
+@media (min-width: 768px) {
+  .app-shell:not(.auth-mode) main { padding: 36px 32px 48px; }
+  .app-shell:not(.auth-mode) .topbar { padding-inline: 32px; }
+  .app-shell:not(.auth-mode) .page-title { font-size: 34px; }
+  .app-shell:not(.auth-mode) .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .app-shell:not(.auth-mode) .notification-card {
+    display: grid;
+    grid-template-columns: 164px minmax(0, 1fr);
+    align-items: start;
+    column-gap: 24px;
+    padding: 22px 26px;
+  }
+  .app-shell:not(.auth-mode) .notification-card > .status-pill { grid-column: 1; grid-row: 1 / span 2; justify-self: start; }
+  .app-shell:not(.auth-mode) .notification-card > h3 { grid-column: 2; margin: 1px 0 7px; }
+  .app-shell:not(.auth-mode) .notification-card > p { grid-column: 2; }
+}
+
+@media (min-width: 1024px) {
+  .app-shell:not(.auth-mode) { padding: 0 0 0 244px; }
+  .app-shell:not(.auth-mode) .topbar { position: sticky; top: 0; z-index: 6; height: 88px; padding: 18px 36px; background: #f7f8f1ed; backdrop-filter: blur(16px); }
+  .app-shell:not(.auth-mode) .header-context { display: block; margin-left: auto; color: var(--muted); font-size: 10px; letter-spacing: .1em; }
+  .app-shell:not(.auth-mode) .profile-menu { margin-left: 20px; }
+  .app-shell:not(.auth-mode) .topbar .brand-mark { width: 40px; height: 40px; flex-basis: 40px; border-radius: 6px; background: var(--green-soft); color: var(--green); }
+  .app-shell:not(.auth-mode) .topbar .brand-copy strong { font-size: 14px; }
+  .app-shell:not(.auth-mode) main { padding: 38px 36px 52px; }
+  .app-shell:not(.auth-mode) .page-header { margin-bottom: 32px; }
+  .app-shell:not(.auth-mode) .page-eyebrow { font-size: 10px; }
+  .app-shell:not(.auth-mode) .bottom-nav {
+    position: fixed;
+    z-index: 7;
+    inset: 0 auto 0 0;
+    width: 244px;
+    height: 100dvh;
+    padding: 34px 18px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    transform: none;
+    border: 0;
+    border-right: 1px solid var(--line);
+    border-radius: 0;
+    background: #fcfdf9;
+    backdrop-filter: none;
+  }
+  .app-shell:not(.auth-mode) .nav-caption { display: block; margin: 0 14px 18px; font-size: 9px; font-weight: 700; letter-spacing: .09em; color: #929d94; }
+  .app-shell:not(.auth-mode) .nav-item { min-height: 48px; padding: 13px 16px; flex-direction: row; gap: 13px; text-align: left; border-radius: 6px; transition: color .15s, background .15s; }
+  .app-shell:not(.auth-mode) .nav-item small { font-size: 13px; font-weight: 500; }
+  .app-shell:not(.auth-mode) .nav-item .nav-icon { width: 20px; height: 20px; stroke-width: 1.7; }
+  .app-shell:not(.auth-mode) .nav-item:hover { background: #edf2e8; color: var(--green); }
+  .app-shell:not(.auth-mode) .nav-item.active { background: #e6efe1; color: var(--green); }
+  .app-shell:not(.auth-mode) .nav-item.active small { font-weight: 700; }
+  .app-shell:not(.auth-mode) .nav-footer { display: block; margin: auto 13px 0; padding: 22px 0 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.7; }
+  .app-shell:not(.auth-mode) .nav-footer strong { display: block; margin-bottom: 4px; color: var(--green); font-size: 12px; font-weight: 600; }
+  .app-shell:not(.auth-mode) .nav-footer small { display: block; margin-top: 4px; color: #929d94; font-size: 9px; }
+  .app-shell:not(.auth-mode) .nav-footer-dot { display: inline-block; width: 6px; height: 6px; margin: 0 7px 1px 0; border-radius: 50%; background: #8aa86e; }
+  .app-shell:not(.auth-mode) .user-panel { width: 310px; padding: 20px; top: calc(100% + 14px); border-radius: 6px; }
+  .app-shell:not(.auth-mode) .user-panel-heading { font-size: 15px; }
+  .app-shell:not(.auth-mode) .user-panel-person { gap: 12px; margin-top: 18px; }
+  .app-shell:not(.auth-mode) .user-panel-person b { font-size: 13px; }
+  .app-shell:not(.auth-mode) .user-panel-person small { font-size: 12px; }
+  .app-shell:not(.auth-mode) .user-panel-note { font-size: 12px; margin-top: 18px; }
+}
+
+@media (min-width: 1250px) {
+  .app-shell:not(.auth-mode) main { padding: 42px 44px 56px; }
+  .app-shell:not(.auth-mode) .topbar { padding-inline: 44px; }
+  .app-shell:not(.auth-mode) .metric { min-height: 144px; padding: 23px; }
+  .app-shell:not(.auth-mode) .metric-value { font-size: 38px; margin-top: 19px; }
+  .app-shell:not(.auth-mode) .dashboard-grid { grid-template-columns: 1.15fr 1fr 1.1fr; }
+  .app-shell:not(.auth-mode) .nutrient-card { grid-column: auto; }
+  .app-shell:not(.auth-mode) .nutrient-row { gap: 7px; }
+  .app-shell:not(.auth-mode) .nutrient { padding: 14px 10px; }
+  .app-shell:not(.auth-mode) .nutrient b { font-size: 24px; }
+  .app-shell:not(.auth-mode) .nutrient small { font-size: 10px; }
+  .app-shell:not(.auth-mode) .history-layout { grid-template-columns: minmax(0, 1fr) 268px; gap: 24px; }
+  .app-shell:not(.auth-mode) .history-aside { grid-template-columns: 1fr; }
+  .app-shell:not(.auth-mode) .history-main .page-toolbar { gap: 14px; }
+  .app-shell:not(.auth-mode) .history-main .garden-picker { min-width: 200px; flex-basis: 200px; }
+  .app-shell:not(.auth-mode) .segmented { min-width: 214px; }
+  .app-shell:not(.auth-mode) .segmented button { padding-inline: 11px; }
+  .app-shell:not(.auth-mode) .device-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1600px) {
+  .app-shell:not(.auth-mode) .collection-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-shell:not(.auth-mode) .recommendation-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-shell:not(.auth-mode) .history-layout { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+
+@media (max-width: 767px) {
+  .app-shell:not(.auth-mode) .topbar { padding: 14px 20px; height: 76px; }
+  .app-shell:not(.auth-mode) main { padding: 26px 20px 32px; }
+  .app-shell:not(.auth-mode) .page-header { margin-bottom: 24px; align-items: flex-start; }
+  .app-shell:not(.auth-mode) .page-status { display: none; }
+  .app-shell:not(.auth-mode) .page-title { font-size: 28px; }
+  .app-shell:not(.auth-mode) .subline { font-size: 12px; }
+  .app-shell:not(.auth-mode) .page-toolbar { display: grid; gap: 14px; margin-bottom: 24px; }
+  .app-shell:not(.auth-mode) .garden-picker { min-width: 0; }
+  .app-shell:not(.auth-mode) .section-heading { margin-bottom: 14px; }
+  .app-shell:not(.auth-mode) .section-heading h2 { font-size: 16px; }
+  .app-shell:not(.auth-mode) .section-heading span { max-width: 42%; font-size: 10px; }
+  .app-shell:not(.auth-mode) .metric-grid { gap: 12px; }
+  .app-shell:not(.auth-mode) .metric { min-height: 115px; padding: 16px; }
+  .app-shell:not(.auth-mode) .metric-label { font-size: 11px; }
+  .app-shell:not(.auth-mode) .metric-value { font-size: 31px; margin-top: 14px; }
+  .app-shell:not(.auth-mode) .metric-unit { font-size: 11px; margin-left: 4px; }
+  .app-shell:not(.auth-mode) .dashboard-grid,
+  .app-shell:not(.auth-mode) .collection-grid,
+  .app-shell:not(.auth-mode) .recommendation-grid,
+  .app-shell:not(.auth-mode) .device-grid,
+  .app-shell:not(.auth-mode) .history-aside { grid-template-columns: 1fr; gap: 16px; }
+  .app-shell:not(.auth-mode) .nutrient-card { grid-column: auto; }
+  .app-shell:not(.auth-mode) .card { padding: 20px; border-radius: 6px; }
+  .app-shell:not(.auth-mode) .greenhouse-card { padding: 0; }
+  .app-shell:not(.auth-mode) .greenhouse-cover { min-height: 185px; }
+  .app-shell:not(.auth-mode) .greenhouse-card-body { padding: 20px; }
+  .app-shell:not(.auth-mode) .history-main .page-toolbar { display: grid; }
+  .app-shell:not(.auth-mode) .segmented { min-width: 0; }
+  .app-shell:not(.auth-mode) .tabs-chip { flex-wrap: nowrap; overflow: auto; padding-bottom: 4px; }
+  .app-shell:not(.auth-mode) .chip { flex-shrink: 0; }
+  .app-shell:not(.auth-mode) .chart { min-height: 170px; margin-top: 15px; }
+  .app-shell:not(.auth-mode) .management-notice { display: grid; gap: 16px; }
+  .app-shell:not(.auth-mode) .management-notice .primary-button { width: 100%; }
+  .app-shell:not(.auth-mode) .notification-card { padding: 20px; }
+  .app-shell:not(.auth-mode) .empty-state,
+  .app-shell:not(.auth-mode) .card.empty { min-height: 230px; padding: 32px 20px; font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell:not(.auth-mode) .nav-item { transition: none; }
+}
